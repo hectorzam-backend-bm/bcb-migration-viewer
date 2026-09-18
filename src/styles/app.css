@@ -1,0 +1,305 @@
+@import 'tailwindcss';
+
+/* Tipografía local (sin CDN): el visor debe funcionar sin red. */
+@import '@fontsource/ibm-plex-serif/400.css';
+@import '@fontsource/ibm-plex-serif/500.css';
+@import '@fontsource/ibm-plex-serif/600.css';
+@import '@fontsource/ibm-plex-sans/400.css';
+@import '@fontsource/ibm-plex-sans/500.css';
+@import '@fontsource/ibm-plex-sans/600.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+@import '@fontsource/ibm-plex-mono/600.css';
+
+@custom-variant oscuro (&:where([data-tema='oscuro'], [data-tema='oscuro'] *));
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Manifiesto de operaciones — papel manila, tinta de máquina, sello de hule.
+   Un solo acento (--sello). Profundidad: rayas y tinte de superficie.
+   Las sombras se reservan EXCLUSIVAMENTE para capas flotantes.
+   ─────────────────────────────────────────────────────────────────────────── */
+:root {
+  color-scheme: light;
+
+  /* Superficies — tres pasos de claridad, mismo matiz cálido */
+  --papel: oklch(0.968 0.0065 85);
+  --hoja: oklch(0.992 0.004 85);
+  --renglon: oklch(0.945 0.009 85);
+  --hundido: oklch(0.932 0.011 85);
+
+  /* Rayas: alfa baja, nunca hex sólido */
+  --raya: oklch(0.42 0.02 70 / 0.15);
+  --raya-firme: oklch(0.38 0.02 70 / 0.3);
+  --raya-tenue: oklch(0.42 0.02 70 / 0.08);
+
+  /* Tinta — cuatro niveles */
+  --tinta: oklch(0.255 0.013 62);
+  --tinta-2: oklch(0.445 0.013 62);
+  --tinta-3: oklch(0.585 0.012 62);
+  --tinta-4: oklch(0.7 0.01 62);
+
+  /* Sello: el único acento. ~10% de la superficie. */
+  --sello: oklch(0.495 0.138 32);
+  --sello-vivo: oklch(0.44 0.15 32);
+  --sello-lavado: oklch(0.945 0.028 40);
+
+  /* Semánticos — señalética de carretera, desgastada */
+  --verde: oklch(0.48 0.082 150);
+  --verde-lavado: oklch(0.945 0.028 150);
+  --ambar: oklch(0.585 0.108 72);
+  --ambar-lavado: oklch(0.948 0.042 85);
+  --oxido: oklch(0.505 0.108 28);
+  --oxido-lavado: oklch(0.945 0.03 30);
+
+  --foco: oklch(0.495 0.138 32 / 0.45);
+
+  /* Elevación — sólo para capas flotantes (popovers, diálogos) */
+  --alzada: 0 0 0 1px oklch(0.3 0.02 60 / 0.09), 0 1px 2px -1px oklch(0.3 0.02 60 / 0.1),
+    0 8px 20px -6px oklch(0.3 0.02 60 / 0.14);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema='claro']) {
+    color-scheme: dark;
+
+    /* El mismo manifiesto, bajo una lámpara de escritorio. Cálido, nunca gris neutro. */
+    --papel: oklch(0.183 0.0075 70);
+    --hoja: oklch(0.216 0.008 70);
+    --renglon: oklch(0.247 0.009 72);
+    --hundido: oklch(0.163 0.007 70);
+
+    --raya: oklch(0.86 0.02 80 / 0.12);
+    --raya-firme: oklch(0.88 0.02 80 / 0.24);
+    --raya-tenue: oklch(0.86 0.02 80 / 0.06);
+
+    --tinta: oklch(0.935 0.011 85);
+    --tinta-2: oklch(0.765 0.012 82);
+    --tinta-3: oklch(0.625 0.012 80);
+    --tinta-4: oklch(0.5 0.011 78);
+
+    --sello: oklch(0.7 0.112 42);
+    --sello-vivo: oklch(0.77 0.115 45);
+    --sello-lavado: oklch(0.305 0.048 40);
+
+    --verde: oklch(0.715 0.075 152);
+    --verde-lavado: oklch(0.288 0.032 152);
+    --ambar: oklch(0.775 0.092 82);
+    --ambar-lavado: oklch(0.308 0.042 80);
+    --oxido: oklch(0.675 0.09 32);
+    --oxido-lavado: oklch(0.298 0.038 30);
+
+    --foco: oklch(0.7 0.112 42 / 0.5);
+
+    /* En oscuro las sombras no leen: la capa flotante se define con un aro. */
+    --alzada: 0 0 0 1px oklch(0.9 0.02 80 / 0.1), 0 10px 26px -8px oklch(0 0 0 / 0.65);
+  }
+}
+
+:root[data-tema='oscuro'] {
+  color-scheme: dark;
+
+  --papel: oklch(0.183 0.0075 70);
+  --hoja: oklch(0.216 0.008 70);
+  --renglon: oklch(0.247 0.009 72);
+  --hundido: oklch(0.163 0.007 70);
+
+  --raya: oklch(0.86 0.02 80 / 0.12);
+  --raya-firme: oklch(0.88 0.02 80 / 0.24);
+  --raya-tenue: oklch(0.86 0.02 80 / 0.06);
+
+  --tinta: oklch(0.935 0.011 85);
+  --tinta-2: oklch(0.765 0.012 82);
+  --tinta-3: oklch(0.625 0.012 80);
+  --tinta-4: oklch(0.5 0.011 78);
+
+  --sello: oklch(0.7 0.112 42);
+  --sello-vivo: oklch(0.77 0.115 45);
+  --sello-lavado: oklch(0.305 0.048 40);
+
+  --verde: oklch(0.715 0.075 152);
+  --verde-lavado: oklch(0.288 0.032 152);
+  --ambar: oklch(0.775 0.092 82);
+  --ambar-lavado: oklch(0.308 0.042 80);
+  --oxido: oklch(0.675 0.09 32);
+  --oxido-lavado: oklch(0.298 0.038 30);
+
+  --foco: oklch(0.7 0.112 42 / 0.5);
+  --alzada: 0 0 0 1px oklch(0.9 0.02 80 / 0.1), 0 10px 26px -8px oklch(0 0 0 / 0.65);
+}
+
+@theme inline {
+  --color-papel: var(--papel);
+  --color-hoja: var(--hoja);
+  --color-renglon: var(--renglon);
+  --color-hundido: var(--hundido);
+
+  --color-raya: var(--raya);
+  --color-raya-firme: var(--raya-firme);
+  --color-raya-tenue: var(--raya-tenue);
+
+  --color-tinta: var(--tinta);
+  --color-tinta-2: var(--tinta-2);
+  --color-tinta-3: var(--tinta-3);
+  --color-tinta-4: var(--tinta-4);
+
+  --color-sello: var(--sello);
+  --color-sello-vivo: var(--sello-vivo);
+  --color-sello-lavado: var(--sello-lavado);
+
+  --color-verde: var(--verde);
+  --color-verde-lavado: var(--verde-lavado);
+  --color-ambar: var(--ambar);
+  --color-ambar-lavado: var(--ambar-lavado);
+  --color-oxido: var(--oxido);
+  --color-oxido-lavado: var(--oxido-lavado);
+
+  --font-serif: 'IBM Plex Serif', ui-serif, Georgia, serif;
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+
+  /* Escala 1.25 sobre base 14 — redondeada a píxel entero */
+  --text-nota: 11px;
+  --text-nota--line-height: 16px;
+  --text-dato: 12px;
+  --text-dato--line-height: 18px;
+  --text-lectura: 14px;
+  --text-lectura--line-height: 21px;
+  --text-rubro: 16px;
+  --text-rubro--line-height: 24px;
+  --text-seccion: 18px;
+  --text-seccion--line-height: 26px;
+  --text-titulo: 22px;
+  --text-titulo--line-height: 30px;
+  --text-portada: 28px;
+  --text-portada--line-height: 36px;
+
+  /* Radios cortos: esto es un formulario impreso, no una tarjeta */
+  --radius-chip: 2px;
+  --radius-hoja: 4px;
+  --radius-flotante: 6px;
+
+  --shadow-alzada: var(--alzada);
+
+  --ease-salida: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-ambos: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+@layer base {
+  * {
+    border-color: var(--raya);
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--papel);
+    color: var(--tinta);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 21px;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-serif);
+    text-wrap: balance;
+    letter-spacing: -0.012em;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* Todo número que cambie lleva cifras tabulares: la columna no debe bailar. */
+  [data-cifra],
+  table td,
+  table th {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--sello);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background: var(--sello-lavado);
+    color: var(--tinta);
+  }
+
+  /* Barra de desplazamiento discreta, del mismo mundo */
+  ::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--raya-firme);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 99px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--tinta-4);
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@keyframes latido {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes surgir {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes desvanecer {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}

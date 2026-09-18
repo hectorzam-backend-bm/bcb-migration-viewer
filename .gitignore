@@ -1,0 +1,15 @@
+node_modules
+dist
+.nitro
+.tanstack
+.vinxi
+dist
+generated
+*.log
+.env
+.env.local
+.DS_Store
+src/routeTree.gen.ts
+.playwright-mcp
+*.png
+.probe

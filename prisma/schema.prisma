@@ -1,0 +1,3696 @@
+generator client {
+  provider        = "prisma-client"
+  output          = "../generated/prisma"
+  runtime         = "nodejs"
+  moduleFormat    = "esm"
+  previewFeatures = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Service {
+  id                 String    @id @default(uuid())
+  number             String
+  key                String    @unique
+  shortName          String    @unique
+  fullName           String    @unique
+  account            String?   @unique
+  isActive           Boolean   @default(true)
+  allowEarlyDispatch Boolean   @default(false)
+  deletedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  // Meramente informativo — sin efecto en el funcionamiento del sistema. Lo escribe solo el sync
+  // HCM (services-hcm-sync.service.ts): true cuando GER retorna ESTATUS="N" o cuando el servicio
+  // deja de venir en el reporte. hcmLastSeenRunId es el runId de la última corrida que lo trajo
+  // (o que lo omitió por un conflicto, sin marcarlo ausente); permite detectar ausencias sin
+  // estado en memoria y distingue servicios gestionados por HCM (!= null) de los creados a mano
+  // por CRUD (null), que nunca deben marcarse. Mismo patrón que Company.hcmDisabled.
+  hcmDisabled      Boolean @default(false)
+  hcmLastSeenRunId String?
+
+  companyId   String
+  company     Company @relation(fields: [companyId], references: [id])
+  createdById String?
+  createdBy   Admin?  @relation("ServiceCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?  @relation("ServiceUpdatedBy", fields: [updatedById], references: [id])
+
+  stations           Station[]
+  routes             Route[]
+  amenities          Amenity[]
+  units              Unit[]
+  advanceSales       AdvanceSale[]
+  ticketFormats      TicketFormat[]
+  buses              Bus[]
+  passengerTypes     PassengerType[]     @relation("ServicePassengerTypes")
+  promotions         Promotion[]
+  operators          Operator[]
+  couponCampaigns    CouponCampaign[]    @relation("CouponCampaignServices")
+  agencyRfcs         AgencyRfcService[]
+  fikFocSchemeRoutes FikFocSchemeRoute[]
+
+  @@index([deletedAt])
+}
+
+model Company {
+  id        String    @id @default(uuid())
+  key       String    @unique
+  shortName String    @unique
+  tradeName String    @unique
+  legalName String    @unique
+  isActive  Boolean   @default(true)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Meramente informativo — sin efecto en el funcionamiento del sistema. Lo escribe solo el sync
+  // HCM (companies-hcm-sync.service.ts): true cuando GER retorna ESTATUS="N" o cuando la empresa
+  // deja de venir en el reporte. hcmLastSeenRunId es el runId de la última corrida que la trajo;
+  // permite detectar ausencias sin estado en memoria y distingue empresas gestionadas por HCM
+  // (!= null) de las creadas a mano por CRUD (null), que nunca deben marcarse.
+  hcmDisabled      Boolean @default(false)
+  hcmLastSeenRunId String?
+
+  createdById String?
+  createdBy   Admin?  @relation("CompanyCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?  @relation("CompanyUpdatedBy", fields: [updatedById], references: [id])
+
+  services                    Service[]
+  cashRegisters               CashRegister[]
+  miscellaneousProductCompany MiscellaneousProductCompany[]
+  couponCampaigns             CouponCampaign[]
+  miscellaneousSales          MiscellaneousSale[]
+  agencies                    Agency[]
+
+  @@index([deletedAt])
+}
+
+model Station {
+  id        String      @id @default(uuid())
+  shortName String      @unique
+  name      String      @unique
+  number    String      @unique
+  address   String?
+  latitude  Float
+  longitude Float
+  googleUrl String?
+  phone     String?
+  type      StationType
+  isActive  Boolean     @default(true)
+  deletedAt DateTime?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  stateId              String
+  state                State   @relation(fields: [stateId], references: [id])
+  facadePhotoFileId    String? @unique
+  facadePhoto          File?   @relation("FacadePhoto", fields: [facadePhotoFileId], references: [id])
+  isometricPhotoFileId String? @unique
+  isometricPhoto       File?   @relation("IsometricPhoto", fields: [isometricPhotoFileId], references: [id])
+
+  createdById String?
+  createdBy   Admin?  @relation("StationCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?  @relation("StationUpdatedBy", fields: [updatedById], references: [id])
+
+  services                    Service[]
+  originRoutes                Route[]                       @relation("RouteOrigin")
+  destinationRoutes           Route[]                       @relation("RouteDestination")
+  segmentsOrigin              Segment[]                     @relation("SegmentOrigin")
+  segmentsDestination         Segment[]                     @relation("SegmentDestination")
+  cashRegisters               CashRegister[]
+  cashRegisterShifts          CashRegisterShift[]
+  advisors                    AdvisorUser[]
+  activeDonations             DonationActivation[]
+  operators                   Operator[]
+  buses                       Bus[]
+  miscellaneousProductStation MiscellaneousProductStation[]
+  miscellaneousSales          MiscellaneousSale[]
+  prepaidCardSales            PrepaidCardSale[]
+  prepaidCardRecharges        PrepaidCardRecharge[]
+  admins                      Admin[]
+  collectorShifts             CollectorShift[]
+  advisorBalances             AdvisorStationBalance[]
+
+  @@index([deletedAt])
+}
+
+enum StationType {
+  SALE
+  SCALE
+}
+
+model DonationActivation {
+  id        String   @id @default(uuid())
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stations Station[]
+}
+
+model State {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stations Station[]
+}
+
+model Route {
+  id                String         @id @default(uuid())
+  number            String         @unique
+  name              String         @unique
+  collectionType    CollectionType
+  priceOneWay       Decimal        @db.Decimal(10, 2)
+  priceRound        Decimal?       @db.Decimal(10, 2)
+  travelTimeMinutes Int // Tiempo de viaje en minutos
+  distanceKm        Float // Distancia en kilómetros
+  stayTimeMinutes   Int // Tiempo de estancia en minutos
+  appliedIVA        Boolean        @default(false) // Indica si se aplica IVA
+  hasSeatsSelection Boolean        @default(true)
+  isActive          Boolean        @default(true)
+  deletedAt         DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  originId      String
+  origin        Station @relation("RouteOrigin", fields: [originId], references: [id])
+  destinationId String
+  destination   Station @relation("RouteDestination", fields: [destinationId], references: [id])
+  serviceId     String
+  service       Service @relation(fields: [serviceId], references: [id])
+  unitId        String?
+  unit          Unit?   @relation(fields: [unitId], references: [id])
+
+  fikFocSchemeId String?
+  fikFocScheme   FikFocScheme? @relation(fields: [fikFocSchemeId], references: [id])
+
+  // --- TomTom / InRoute ---
+  tomTomInstruccionViajeId Int? @unique // nInstruccionViaje en InRoute
+
+  createdById String?
+  createdBy   Admin?  @relation("RouteCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?  @relation("RouteUpdatedBy", fields: [updatedById], references: [id])
+
+  segments           Segment[]
+  salesChannels      RouteSalesChannel[]
+  passengerTypes     RoutePassengerType[]
+  trips              Trip[]
+  stops              CourtesyStop[]
+  tripsXlsxTemplates TripTemplate[]
+  promotions         Promotion[]
+  advanceSales       AdvanceSale[]
+  couponCampaigns    CouponCampaign[]
+  orderItems         OrderItem[]
+  fikFocSchemeRoutes FikFocSchemeRoute[]
+
+  @@index([deletedAt])
+}
+
+enum CollectionType {
+  AUTOMATIC
+  NORMAL
+}
+
+model Segment {
+  id              String   @id @default(uuid())
+  number          String
+  stayTimeMinutes Int // Tiempo de estancia en minutos
+  durationMinutes Int      @default(0) // Tiempo de viaje del tramo
+  distanceKm      Float?
+  allowSale       Boolean  @default(true) // Proximo a eliminarse
+  isActive        Boolean  @default(true)
+  isMain          Boolean  @default(false) // Tramo principal (origen-destino de la ruta)
+  priceOneWay     Decimal  @db.Decimal(10, 2) // Tarifa sencilla
+  priceRound      Decimal? @db.Decimal(10, 2) // Tarifa redonda (opcional)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  originStationId      String
+  originStation        Station @relation("SegmentOrigin", fields: [originStationId], references: [id])
+  destinationStationId String
+  destinationStation   Station @relation("SegmentDestination", fields: [destinationStationId], references: [id])
+  routeId              String
+  route                Route   @relation(fields: [routeId], references: [id], onDelete: Cascade)
+
+  passengerTypes SegmentPassengerType[]
+  stops          CourtesyStop[]
+  salesChannels  SegmentSalesChannel[]
+  orderItems     OrderItem[]
+
+  deletedAt    DateTime?
+  tripSegments TripSegment[]
+
+  @@unique([routeId, number])
+  @@unique([routeId, isMain], where: { isMain: true, deletedAt: null })
+  @@index([deletedAt])
+}
+
+model SalesChannel {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  isActive  Boolean   @default(true)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  routes                   RouteSalesChannel[]
+  passengerTypes           PassengerType[]
+  promotions               Promotion[]
+  advanceSales             AdvanceSale[]
+  couponCampaigns          CouponCampaign[]
+  segments                 SegmentSalesChannel[]
+  orderItemStatusHistories OrderItemStatusHistory[]
+  orders                   Order[]
+  invoiceCodes             InvoiceCode[]
+
+  @@index([deletedAt])
+}
+
+model RouteSalesChannel {
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  routeId        String
+  route          Route        @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  salesChannelId String
+  salesChannel   SalesChannel @relation(fields: [salesChannelId], references: [id], onDelete: Cascade)
+
+  @@id([routeId, salesChannelId])
+}
+
+model SegmentSalesChannel {
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  segmentId      String
+  segment        Segment      @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  salesChannelId String
+  salesChannel   SalesChannel @relation(fields: [salesChannelId], references: [id], onDelete: Cascade)
+
+  @@id([segmentId, salesChannelId])
+}
+
+model PassengerType {
+  id                 String      @id @default(uuid())
+  number             Int         @unique @default(autoincrement())
+  order              Int?
+  key                String      @unique
+  name               String      @unique
+  description        String?
+  requiredDocument   Boolean     @default(false)
+  documentType       String?
+  isActive           Boolean     @default(true)
+  discountPercent    Int         @default(0)
+  seatingLimit       Int?
+  allowedTicketTypes OrderType[] @default([ONE_WAY, ROUND, OPEN, OPEN_ROUND])
+  deletedAt          DateTime?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  fileId String @unique
+  icon   File   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  createdById String?
+  createdBy   Admin?  @relation("PassengerTypeCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?  @relation("PassengerTypeUpdatedBy", fields: [updatedById], references: [id])
+
+  routes        RoutePassengerType[]
+  trips         TripPassengerType[]
+  salesChannels SalesChannel[]
+  segments      SegmentPassengerType[]
+  seats         TripSeat[]
+  passengers    Passenger[]
+
+  services                  Service[]                  @relation("ServicePassengerTypes")
+  tripSegmentPassengerTypes TripSegmentPassengerType[]
+  purchaseCouponCampaigns   CouponCampaign[]           @relation("CouponCampaignPurchasePassengerType")
+  deliveryCouponCampaigns   CouponCampaign[]           @relation("CouponCampaignDeliveryPassengerType")
+
+  @@index([deletedAt])
+}
+
+model RoutePassengerType {
+  seatingLimit Int? // Null cuando no hay límite
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  routeId         String
+  route           Route         @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  passengerTypeId String
+  passengerType   PassengerType @relation(fields: [passengerTypeId], references: [id], onDelete: Cascade)
+
+  @@id([routeId, passengerTypeId])
+}
+
+model SegmentPassengerType {
+  seatingLimit Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  segmentId       String
+  segment         Segment       @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  passengerTypeId String
+  passengerType   PassengerType @relation(fields: [passengerTypeId], references: [id], onDelete: Cascade)
+
+  @@id([segmentId, passengerTypeId])
+}
+
+model CourtesyStop {
+  id        String   @id @default(uuid())
+  name      String
+  order     Int
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  routeId   String?
+  route     Route?   @relation(fields: [routeId], references: [id])
+  segment   Segment? @relation(fields: [segmentId], references: [id])
+  segmentId String?
+}
+
+model File {
+  id        String   @id @default(uuid())
+  name      String
+  path      String
+  url       String
+  mimetype  String
+  size      Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  passenger             PassengerType?
+  facadePhotoStation    Station?       @relation("FacadePhoto")
+  isometricPhotoStation Station?       @relation("IsometricPhoto")
+  amenityIcon           Amenity?
+  unitDeck              UnitDeck?
+  unitDeckVertical      UnitDeck?      @relation("UnitDeckVertical")
+  ticketFormat          TicketFormat?  @relation("TicketFormatLogo")
+}
+
+model Amenity {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  iconFileId  String    @unique
+  icon        File      @relation(fields: [iconFileId], references: [id], onDelete: Cascade)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  createdById String?
+  createdBy   Admin?  @relation("AmenityCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?  @relation("AmenityUpdatedBy", fields: [updatedById], references: [id])
+
+  services Service[]
+  units    Unit[]
+
+  @@index([deletedAt])
+}
+
+model Unit {
+  id           String    @id @default(uuid())
+  name         String
+  description  String?
+  number       Int
+  type         UnitType  @default(BUS)
+  bathroomSide String?
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  createdById String?
+  createdBy   Admin?  @relation("UnitCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?  @relation("UnitUpdatedBy", fields: [updatedById], references: [id])
+
+  services  Service[]
+  amenities Amenity[]
+  decks     UnitDeck[]
+  routes    Route[]
+
+  @@index([deletedAt])
+}
+
+model UnitDeck {
+  id        String   @id @default(uuid())
+  order     Int
+  capacity  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  unitId               String
+  unit                 Unit    @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  layoutFileId         String  @unique
+  layout               File    @relation(fields: [layoutFileId], references: [id], onDelete: Cascade)
+  verticalLayoutFileId String? @unique
+  verticalLayout       File?   @relation("UnitDeckVertical", fields: [verticalLayoutFileId], references: [id], onDelete: Cascade)
+
+  @@unique([unitId, order])
+}
+
+enum UnitType {
+  BUS
+  MICROBUS
+  VAN
+}
+
+enum TripStatus {
+  OPEN
+  CLOSED
+  CANCELLED
+  FINISHED
+  DISPATCHED
+  CONFIRMED
+  CANCELLED_BY_GROUP
+}
+
+enum TripType {
+  NORMAL
+  EXTRA
+}
+
+model Trip {
+  id              String     @id @default(uuid())
+  departure       DateTime
+  arrival         DateTime?
+  openSale        Boolean    @default(true)
+  priceOneWay     Decimal    @default(0.00) @db.Decimal(10, 2)
+  priceRound      Decimal    @default(0.00) @db.Decimal(10, 2)
+  realDepartureAt DateTime?
+  realArrivalAt   DateTime?
+  status          TripStatus @default(OPEN)
+  type            TripType   @default(NORMAL)
+  dispatchedAt    DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  deletedAt       DateTime?
+
+  operatorId String?
+  operator   Operator? @relation(fields: [operatorId], references: [id])
+  busId      String?
+  bus        Bus?      @relation(fields: [busId], references: [id])
+  routeId    String
+  route      Route     @relation(fields: [routeId], references: [id])
+
+  travelCard   TravelCard?
+  planning     TripPlanning?
+  tripDispatch TripDispatch?
+
+  passengers                TripPassengerType[]
+  seats                     TripSeat[]
+  segments                  TripSegment[]
+  tripAdvanceSaleUsages     TripAdvanceSaleUsage[]
+  orderItemsOffline         OrderItemOffline[]
+  tripAdvanceSaleRuleUsages TripAdvanceSaleRuleUsage[]
+
+  @@unique([routeId, departure], where: { deletedAt: null })
+  @@index([routeId, departure])
+  @@index([departure, status, openSale])
+  @@index([deletedAt])
+}
+
+model TripPassengerType {
+  isActive     Boolean @default(true)
+  seatingLimit Int?
+  ticketsSold  Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tripId          String
+  trip            Trip          @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  passengerTypeId String
+  passengerType   PassengerType @relation(fields: [passengerTypeId], references: [id], onDelete: Cascade)
+
+  @@id([tripId, passengerTypeId])
+}
+
+model TripSegment {
+  id          String   @id @default(uuid())
+  tripId      String
+  segmentId   String
+  priceOneWay Decimal  @db.Decimal(10, 2)
+  priceRound  Decimal? @db.Decimal(10, 2)
+  departure   DateTime @default(now())
+  arrival     DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  trip    Trip    @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  segment Segment @relation(fields: [segmentId], references: [id])
+
+  passengerTypes TripSegmentPassengerType[]
+  tripSeats      TripSeat[]
+
+  orderItemStatusHistories OrderItemStatusHistory[]
+
+  @@unique([tripId, segmentId])
+  @@index([segmentId])
+  @@index([tripId])
+}
+
+model TripSegmentPassengerType {
+  isActive     Boolean @default(true)
+  seatingLimit Int?
+  ticketsSold  Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tripSegmentId   String
+  tripSegment     TripSegment   @relation(fields: [tripSegmentId], references: [id], onDelete: Cascade)
+  passengerTypeId String
+  passengerType   PassengerType @relation(fields: [passengerTypeId], references: [id], onDelete: Cascade)
+
+  @@id([tripSegmentId, passengerTypeId])
+}
+
+model TripSeat {
+  id              String     @id @default(uuid())
+  status          SeatStatus @default(AVAILABLE)
+  number          Int
+  passengerTypeId String?
+  lockedAt        DateTime?
+  tripId          String
+  // Tramo del apartado vigente (AVAILABLE -> HOLD). Se limpia al liberar
+  // (HOLD -> AVAILABLE); un valor rancio en un asiento BOOKED es inofensivo
+  // porque toda lectura de cupo filtra status: HOLD.
+  tripSegmentId   String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  trip          Trip                  @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  passengerType PassengerType?        @relation(fields: [passengerTypeId], references: [id])
+  tripSegment   TripSegment?          @relation(fields: [tripSegmentId], references: [id], onDelete: SetNull)
+  orderItems    OrderItem[]
+  blockReasons  TripSeatBlockReason[]
+
+  @@index([tripId, number])
+  @@index([tripSegmentId, status])
+}
+
+model TripSeatBlockReason {
+  id        String   @id @default(uuid())
+  reason    String
+  seatId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  seats TripSeat @relation(fields: [seatId], references: [id])
+}
+
+enum SeatStatus {
+  AVAILABLE
+  HOLD
+  BLOCKED
+  BOOKED
+  CHECK_IN
+}
+
+model TravelCard {
+  id           String           @id @default(uuid())
+  number       String
+  key          String?          @unique
+  status       TravelCardStatus @default(OPEN)
+  departure    DateTime
+  tomTomFailed Boolean          @default(false)
+  tomTomTripId Int?             @unique // nViaje en InRoute (se llena al sincronizar con éxito)
+
+  tripId String @unique
+  trip   Trip   @relation(fields: [tripId], references: [id])
+
+  updatedById String?
+  updatedBy   Admin?  @relation("TravelCardUpdatedBy", fields: [updatedById], references: [id])
+
+  statusLogs    TravelCardStatusLog[]
+  collection    TravelCardCollection?
+  boardingSales BoardingSale[]
+  tomTomSyncs   TravelCardTomTomSync[]
+  tomTomData    TomTomTripData?
+  reprints      TravelCardReprint[]
+
+  confirmedAt DateTime?
+  collectedAt DateTime?
+  cancelledAt DateTime?
+
+  operatorPaymentSchemeType FikFocSchemeType?
+  operatorPaymentIndicator  Decimal?          @db.Decimal(10, 4)
+  operatorPaymentFactor     Decimal?          @db.Decimal(10, 4)
+  operatorPaymentBase       Decimal?          @db.Decimal(10, 2)
+  operatorPaymentAmount     Decimal?          @db.Decimal(10, 2)
+
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  amountLines TravelCardAmountLine[]
+}
+
+model TravelCardReprint {
+  id            String  @id @default(uuid())
+  reprintNumber Int
+  justification String? @db.VarChar(500)
+
+  travelCardId String
+  travelCard   TravelCard @relation(fields: [travelCardId], references: [id])
+
+  reprintedById String
+  reprintedBy   Admin  @relation("TravelCardReprintedBy", fields: [reprintedById], references: [id])
+
+  reprintedAt DateTime @default(now())
+
+  @@unique([travelCardId, reprintNumber])
+  @@index([travelCardId])
+}
+
+model TravelCardCollection {
+  id               String  @id @default(uuid())
+  collectionNumber Int     @unique
+  expectedAmount   Decimal @db.Decimal(14, 2) // Monto calculado por el sistema al momento de recaudar
+
+  travelCardId String     @unique
+  travelCard   TravelCard @relation(fields: [travelCardId], references: [id])
+
+  collectedById String?
+  collectedBy   Admin?  @relation("TravelCardCollectionCollectedBy", fields: [collectedById], references: [id])
+
+  collectorShiftId String?
+  collectorShift   CollectorShift? @relation(fields: [collectorShiftId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([collectorShiftId])
+}
+
+model TravelCardAmountLine {
+  id       String            @id @default(uuid())
+  concept  CollectionConcept
+  quantity Int
+  amount   Decimal           @db.Decimal(14, 2)
+
+  travelCardId String
+  travelCard   TravelCard @relation(fields: [travelCardId], references: [id], onDelete: Cascade)
+
+  @@unique([travelCardId, concept])
+}
+
+enum CollectionConcept {
+  SYSTEM_SALES // Venta de sistema (Aquellos boletos que fueron escaneados por el operador pero no vendidos por el mismo)
+  ONBOARD_SALES // Venta a bordo (Boletos vendidos por el operador)
+  MANUAL_SALES // Venta manual (Ajustes en la recolección)
+  PREPAID_TICKETS // Prepago: Boletos pagados mediante tarjeta de prepago
+  PREPAID_RECHARGES // Prepago: Recargas a tarjetas de prepago
+  PREPAID_SALES // Prepago: Ventas de tarjetas de prepago
+  PENALTY // Penalización al momento de la recaudación
+}
+
+model TravelCardStatusLog {
+  id             String           @id @default(uuid())
+  previousStatus TravelCardStatus
+  newStatus      TravelCardStatus
+  justification  String?          @db.VarChar(250)
+
+  travelCardId String
+  travelCard   TravelCard @relation(fields: [travelCardId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+model CollectorShift {
+  id          String               @id @default(uuid())
+  corteNumber Int                  @unique
+  period      CollectorShiftPeriod
+  status      CollectorShiftStatus @default(OPEN)
+
+  collectorId String
+  collector   Admin  @relation("CollectorShiftCollector", fields: [collectorId], references: [id])
+
+  stationId String
+  station   Station @relation(fields: [stationId], references: [id])
+
+  coordinatorId String?
+  coordinator   Admin?  @relation("CollectorShiftCoordinator", fields: [coordinatorId], references: [id])
+
+  lockedById    String?
+  lockedBy      Admin?    @relation("CollectorShiftLockedBy", fields: [lockedById], references: [id])
+  lockedAt      DateTime?
+  lockExpiresAt DateTime?
+
+  openedAt       DateTime  @default(now())
+  closedAt       DateTime?
+  shiftEnd       DateTime?
+  cutStartedAt   DateTime?
+  cutCompletedAt DateTime?
+
+  updatedAt   DateTime @default(now()) @updatedAt
+  updatedById String?
+  updatedBy   Admin?   @relation("CollectorShiftUpdatedBy", fields: [updatedById], references: [id])
+
+  declaredCardCount Int?
+  declaredAmount    Decimal? @db.Decimal(12, 2)
+  actualCardCount   Int?
+  actualAmount      Decimal? @db.Decimal(12, 2)
+  cardCountDiff     Int?
+  amountDiff        Decimal? @db.Decimal(12, 2)
+
+  collections TravelCardCollection[]
+
+  @@unique([collectorId, stationId], map: "CollectorShift_one_open_per_collector_station", where: { status: "OPEN" })
+  @@index([collectorId])
+  @@index([stationId])
+  @@index([coordinatorId])
+}
+
+enum CollectorShiftPeriod {
+  MORNING // 05:00–13:59
+  AFTERNOON // 14:00–21:59
+  NIGHT // 22:00–04:59
+}
+
+enum CollectorShiftStatus {
+  OPEN
+  IN_PROCESS
+  RECONCILED
+  RECONCILED_WITH_DIFFERENCE
+}
+
+enum TravelCardStatus {
+  OPEN
+  CONFIRMED
+  COLLECTED
+  CANCELLED
+}
+
+enum CashRegisterStatus {
+  ACTIVE
+  INACTIVE
+  UNASSIGNED
+}
+
+// Tipos de corte de caja
+enum CashRegisterShiftType {
+  SHIFT // Corte por turno (individual)
+  DAILY // Corte diario
+  TERMINAL // Corte de terminal
+  TICKET_OFFICE // Taquilla
+  TICKET_OFFICE_OFFLINE // Ticket collector offline
+}
+
+// Estados del corte de caja
+enum CashRegisterShiftStatus {
+  OPEN // Turno activo, asesor trabajando
+  IN_PROCESS // Coordinador realizando corte
+  RECONCILED // Conciliado sin diferencias
+  RECONCILED_WITH_DIFFERENCE // Conciliado con diferencias
+}
+
+model CashRegister {
+  id                   String                   @id @default(uuid())
+  name                 String                   @unique
+  number               String
+  deviceIdentifier     String                   @unique
+  paymentTypes         PaymentType[]
+  status               CashRegisterStatus       @default(INACTIVE)
+  openingFloat         Decimal?                 @db.Decimal(14, 2)
+  minCashLimit         Decimal?                 @db.Decimal(14, 2)
+  maxCashLimit         Decimal?                 @db.Decimal(14, 2)
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  deletedAt            DateTime?
+  device               CashRegisterDevice
+  stationId            String
+  station              Station                  @relation(fields: [stationId], references: [id])
+  companies            Company[]
+  createdById          String?
+  createdBy            Admin?                   @relation("CashRegisterCreatedBy", fields: [createdById], references: [id])
+  updatedById          String?
+  updatedBy            Admin?                   @relation("CashRegisterUpdatedBy", fields: [updatedById], references: [id])
+  activeAdvisorUserId  String?
+  activeAdvisorUser    AdvisorUser?             @relation("CashRegisterActiveAdvisorUser", fields: [activeAdvisorUserId], references: [id], onDelete: SetNull)
+  activeOperatorId     String?
+  activeOperator       Operator?                @relation("CashRegisterActiveOperator", fields: [activeOperatorId], references: [id], onDelete: SetNull)
+  miscellaneousSales   MiscellaneousSale[]
+  orders               Order[]
+  loyaltyWallets       LoyaltyWallet[]
+  prepaidCardSales     PrepaidCardSale[]
+  prepaidCardRecharges PrepaidCardRecharge[]
+  ticketMovements      OrderItemStatusHistory[]
+
+  @@unique([name, stationId])
+  @@index([deletedAt])
+}
+
+enum CashRegisterDevice {
+  TICKET_OFFICE
+  TICKET_COLLECTOR_TPV
+  TICKET_COLLECTOR_OFFLINE
+  MOBILE_BOARDING
+}
+
+// Modelo de Corte de Caja (Shift)
+model CashRegisterShift {
+  id                String                  @id @default(uuid())
+  shiftType         CashRegisterShiftType
+  status            CashRegisterShiftStatus @default(OPEN)
+  openingCashAmount Decimal                 @default(0) @db.Decimal(14, 2) // Monto inicial al abrir el turno
+
+  // Indica si Ticket Collector Offline (TCO) ya sincronizó su venta en BCB
+  isTCOSync Boolean @default(false)
+
+  // Número secuencial del corte (por caja)
+  shiftNumber Int
+
+  advisorUserId String?
+  advisorUser   AdvisorUser? @relation(fields: [advisorUserId], references: [id])
+
+  stationId String
+  station   Station @relation(fields: [stationId], references: [id])
+
+  shiftStart     DateTime  @default(now())
+  shiftEnd       DateTime?
+  cutStartedAt   DateTime?
+  cutCompletedAt DateTime?
+
+  systemTotalCount  Int     @default(0)
+  systemTotalAmount Decimal @default(0) @db.Decimal(14, 2)
+
+  cashDifference  Decimal? @db.Decimal(14, 2)
+  cardDifference  Decimal? @db.Decimal(14, 2)
+  totalDifference Decimal? @db.Decimal(14, 2)
+
+  notes            String? @db.Text
+  discrepancyNotes String? @db.Text
+  coordinatorNotes String? @db.Text
+
+  // Auditoría
+  coordinatorId String?
+  coordinator   Admin?  @relation("ShiftCoordinator", fields: [coordinatorId], references: [id])
+  createdById   String?
+  createdBy     Admin?  @relation("ShiftCreatedBy", fields: [createdById], references: [id])
+  updatedById   String?
+  updatedBy     Admin?  @relation("ShiftUpdatedBy", fields: [updatedById], references: [id])
+
+  lockedById    String?
+  lockedBy      Admin?    @relation("ShiftLockedBy", fields: [lockedById], references: [id])
+  lockedAt      DateTime? // Timestamp de cuando se bloqueó
+  lockExpiresAt DateTime? // Expiración automática del bloqueo (ej: 5 minutos)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  // Relaciones
+  cashBreakdown        CashBreakdown?
+  amountLines          ShiftAmountLine[]
+  cashCollections      CashCollection[]
+  orders               Order[]
+  miscellaneousSales   MiscellaneousSale[]
+  prepaidCardSales     PrepaidCardSale[]
+  prepaidCardRecharges PrepaidCardRecharge[]
+  ticketMovements      OrderItemStatusHistory[]
+
+  @@index([advisorUserId])
+  @@index([stationId])
+  @@index([status])
+  @@index([shiftStart])
+  @@index([deletedAt])
+}
+
+// ─── ENUMS ───
+enum ShiftPaymentMethod {
+  CASH
+  CARD
+  OTHER
+}
+
+enum ShiftConcept {
+  // Efectivo y Tarjeta
+  TOTAL // Solo aplica a CASH y CARD (systemCashTotal*, systemCardTotal*)
+  ONE_WAY_ROUND_TICKETS
+  OPEN_TICKETS
+  COUPON_TICKETS
+  PROMO_TICKETS
+  OPEN_REFERENCED_TICKETS
+  REDEEMED_REFERENCED_TICKETS
+  MISCELLANEOUS
+  PREPAID_CARD_SALES
+  PREPAID_CARD_RECHARGES
+  CANCELLATIONS
+  SURCHARGES
+  REFUNDS
+  PENALTIES
+
+  // Otros (paymentMethod = OTHER)
+  LOYALTY_PROGRAM
+  TRAVEL_ORDERS
+  TRANSFER_TICKETS
+  COURTESIES
+  REDEEMED_TICKETS
+  REFERENCED_TICKETS
+  SURPLUS
+  SCHEDULE_CHANGES
+}
+
+// ─── MODELO NORMALIZADO ───
+model ShiftAmountLine {
+  id String @id @default(uuid())
+
+  shiftId String
+  shift   CashRegisterShift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  paymentMethod ShiftPaymentMethod
+  concept       ShiftConcept
+
+  // Sistema (calculado automáticamente)
+  systemCount  Int     @default(0)
+  systemAmount Decimal @default(0) @db.Decimal(14, 2)
+
+  // Declarado por el asesor/coordinador
+  declaredCount  Int?
+  declaredAmount Decimal? @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Cada combinación shift + método + concepto es única
+  @@unique([shiftId, paymentMethod, concept])
+  @@index([shiftId])
+  @@index([paymentMethod, concept])
+}
+
+// Desglose de efectivo físico (billetes y monedas)
+model CashBreakdown {
+  id String @id @default(uuid())
+
+  shiftId String            @unique
+  shift   CashRegisterShift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  // Billetes (cantidad de cada denominación)
+  bills1000 Int @default(0)
+  bills500  Int @default(0)
+  bills200  Int @default(0)
+  bills100  Int @default(0)
+  bills50   Int @default(0)
+  bills20   Int @default(0)
+
+  // Monedas
+  coins20  Int @default(0)
+  coins10  Int @default(0)
+  coins5   Int @default(0)
+  coins2   Int @default(0)
+  coins1   Int @default(0)
+  coins050 Int @default(0) // $0.50
+
+  // Total calculado
+  totalAmount Decimal @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Recolección de efectivo de caja
+model CashCollection {
+  id                  String  @id @default(uuid())
+  amount              Decimal @db.Decimal(14, 2) // Monto recolectado
+  isOpeningCashAmount Boolean @default(false) // true si es apertura de caja, false si es recolección normal
+
+  shiftId String
+  shift   CashRegisterShift @relation(fields: [shiftId], references: [id])
+
+  createdById String?
+  createdBy   Admin?  @relation("CashCollectionCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([shiftId])
+  @@index([deletedAt])
+}
+
+// Efectivo en mano del asesor, por estación. Todas las cajas de una misma
+// estación comparten un solo saldo; cambiar de estación sí resetea a 0.
+model AdvisorStationBalance {
+  id          String  @id @default(uuid())
+  currentCash Decimal @default(0) @db.Decimal(14, 2)
+
+  advisorUserId String
+  advisorUser   AdvisorUser @relation(fields: [advisorUserId], references: [id], onDelete: Cascade)
+  stationId     String
+  station       Station     @relation(fields: [stationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([advisorUserId, stationId])
+  @@index([advisorUserId])
+  @@index([stationId])
+}
+
+enum PaymentType {
+  CASH
+  CARD
+  PAYMENT_WITH_POINTS
+  PAYMENT_WITH_TRAVEL_ORDER
+  TRANSFER_PASS
+  COMPLIMENTARY
+  EXCHANGE //Venta sistema: Aquellos que se escanearon.
+  PREPAID //Boletos: Aquellos que pagas con prepago
+  RELOAD //Recargas: Recarga de saldo en una tarjeta de prepago
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+model Admin {
+  id                    String              @id @default(uuid())
+  key                   String              @unique
+  cognitoId             String?             @unique
+  email                 String              @unique
+  name                  String
+  position              String?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  departmentId          String
+  department            AdminsDepartment    @relation(fields: [departmentId], references: [id])
+  roleId                String
+  role                  AdminDepartmentRole @relation(fields: [roleId], references: [id])
+  permissions           AdminPermission[]
+  lastLoginAt           DateTime?
+  lastChangedPasswordAt DateTime            @default(now())
+  passwordExpiryDays    Int                 @default(90)
+  status                UserStatus          @default(ACTIVE)
+  deletedAt             DateTime?
+
+  createdById String?
+  createdBy   Admin?  @relation("AdminCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?  @relation("AdminUpdatedBy", fields: [updatedById], references: [id])
+
+  sessions AdminSession?
+  stations Station[]
+
+  createdAmenities                   Amenity[]                     @relation("AmenityCreatedBy")
+  updatedAmenities                   Amenity[]                     @relation("AmenityUpdatedBy")
+  createdCompanies                   Company[]                     @relation("CompanyCreatedBy")
+  updatedCompanies                   Company[]                     @relation("CompanyUpdatedBy")
+  createdPassengerTypes              PassengerType[]               @relation("PassengerTypeCreatedBy")
+  updatedPassengerTypes              PassengerType[]               @relation("PassengerTypeUpdatedBy")
+  createdServices                    Service[]                     @relation("ServiceCreatedBy")
+  updatedServices                    Service[]                     @relation("ServiceUpdatedBy")
+  createdStations                    Station[]                     @relation("StationCreatedBy")
+  updatedStations                    Station[]                     @relation("StationUpdatedBy")
+  createdUnits                       Unit[]                        @relation("UnitCreatedBy")
+  updatedUnits                       Unit[]                        @relation("UnitUpdatedBy")
+  createdRoutes                      Route[]                       @relation("RouteCreatedBy")
+  updatedRoutes                      Route[]                       @relation("RouteUpdatedBy")
+  createdAdvisorUsers                AdvisorUser[]                 @relation("AdvisorUserCreatedBy")
+  updatedAdvisorUsers                AdvisorUser[]                 @relation("AdvisorUserUpdatedBy")
+  createdCashRegisters               CashRegister[]                @relation("CashRegisterCreatedBy")
+  updatedCashRegisters               CashRegister[]                @relation("CashRegisterUpdatedBy")
+  createdPromotions                  Promotion[]                   @relation("PromotionCreatedBy")
+  updatedPromotions                  Promotion[]                   @relation("PromotionUpdatedBy")
+  createdAdmins                      Admin[]                       @relation("AdminCreatedBy")
+  updatedAdmins                      Admin[]                       @relation("AdminUpdatedBy")
+  createMiscellaneousType            MiscellaneousType[]           @relation("MiscellaneousTypeCreatedBy")
+  updatedMiscellaneousType           MiscellaneousType[]           @relation("MiscellaneousTypeUpdatedBy")
+  createdMiscellaneousProduct        MiscellaneousProduct[]        @relation("MiscellaneousProductCreatedBy")
+  updatedMiscellaneousProduct        MiscellaneousProduct[]        @relation("MiscellaneousProductUpdatedBy")
+  createdMiscellaneousProductCompany MiscellaneousProductCompany[] @relation("MiscellaneousProductCompanyCreatedBy")
+  updatedMiscellaneousProductCompany MiscellaneousProductCompany[] @relation("MiscellaneousProductCompanyUpdatedBy")
+  createdMiscellaneousProductStation MiscellaneousProductStation[] @relation("MiscellaneousProductStationCreatedBy")
+  updatedMiscellaneousProductStation MiscellaneousProductStation[] @relation("MiscellaneousProductStationUpdatedBy")
+  createdAdvanceSales                AdvanceSale[]                 @relation("AdvanceSaleCreatedBy")
+  updatedAdvanceSales                AdvanceSale[]                 @relation("AdvanceSaleUpdatedBy")
+  createdCouponCampaign              CouponCampaign[]              @relation("CouponCampaignCreatedBy")
+  updatedCouponCampaign              CouponCampaign[]              @relation("CouponCampaignUpdatedBy")
+  Notification                       Notification[]
+  createdTicketFormat                TicketFormat[]                @relation("TicketFormatCreatedBy")
+  updatedTicketFormat                TicketFormat[]                @relation("TicketFormatUpdatedBy")
+  createdBuses                       Bus[]                         @relation("BusCreatedBy")
+  createdBusMaintenances             BusMaintenance[]              @relation("BusMaintenanceCreatedBy")
+  updatedBuses                       Bus[]                         @relation("BusUpdatedBy")
+  coordinatorShifts                  CashRegisterShift[]           @relation("ShiftCoordinator")
+  createdShifts                      CashRegisterShift[]           @relation("ShiftCreatedBy")
+  updatedShifts                      CashRegisterShift[]           @relation("ShiftUpdatedBy")
+  lockedShifts                       CashRegisterShift[]           @relation("ShiftLockedBy")
+  createdCashCollections             CashCollection[]              @relation("CashCollectionCreatedBy")
+  createdLoyaltyWallets              LoyaltyWallet[]               @relation("LoyaltyWalletCreatedBy")
+  updatedLoyaltyWallets              LoyaltyWallet[]               @relation("LoyaltyWalletUpdatedBy")
+  createdLoyaltyTransactions         LoyaltyTransaction[]          @relation("LoyaltyTransactionCreatedBy")
+  updatedLoyaltyTransactions         LoyaltyTransaction[]          @relation("LoyaltyTransactionUpdatedBy")
+  createdLoyaltyPointBuckets         LoyaltyPointBucket[]          @relation("LoyaltyPointBucketCreatedBy")
+  updatedLoyaltyPointBuckets         LoyaltyPointBucket[]          @relation("LoyaltyPointBucketUpdatedBy")
+  createdLoyaltyBucketUsages         LoyaltyBucketUsage[]          @relation("LoyaltyBucketUsageCreatedBy")
+  updatedLoyaltyBucketUsages         LoyaltyBucketUsage[]          @relation("LoyaltyBucketUsageUpdatedBy")
+  createdLoyaltyDetailsByServices    LoyaltyDetailsByService[]     @relation("LoyaltyDetailsByServiceCreatedBy")
+  updatedLoyaltyDetailsByServices    LoyaltyDetailsByService[]     @relation("LoyaltyDetailsByServiceUpdatedBy")
+  createdLoyalityLegalByServices     LoyalityLegalByService[]      @relation("LoyalityLegalByServiceCreatedBy")
+  updatedLoyalityLegalByServices     LoyalityLegalByService[]      @relation("LoyalityLegalByServiceUpdatedBy")
+  createdLoyalityBanner              LoyalityBanner[]              @relation("LoyalityBannerCreatedBy")
+  updatedLoyalityBanner              LoyalityBanner[]              @relation("LoyalityBannerUpdatedBy")
+  createdLoyalityBannerByServices    LoyalityBannerByService[]     @relation("LoyalityBannerByServiceCreatedBy")
+  updatedLoyalityBannerByServices    LoyalityBannerByService[]     @relation("LoyalityBannerByServiceUpdatedBy")
+  updatedTravelCards                 TravelCard[]                  @relation("TravelCardUpdatedBy")
+  collectedTravelCards               TravelCardCollection[]        @relation("TravelCardCollectionCollectedBy")
+  collectorShifts                    CollectorShift[]              @relation("CollectorShiftCollector")
+  coordinatedShifts                  CollectorShift[]              @relation("CollectorShiftCoordinator")
+  lockedCollectorShifts              CollectorShift[]              @relation("CollectorShiftLockedBy")
+  updatedCollectorShifts             CollectorShift[]              @relation("CollectorShiftUpdatedBy")
+  reprintedTravelCards               TravelCardReprint[]           @relation("TravelCardReprintedBy")
+  createdFikFocSchemes               FikFocScheme[]                @relation("FikFocSchemeCreatedBy")
+  updatedFikFocSchemes               FikFocScheme[]                @relation("FikFocSchemeUpdatedBy")
+  createdFikFocRanges                FikFocRange[]                 @relation("FikFocRangeCreatedBy")
+  updatedFikFocRanges                FikFocRange[]                 @relation("FikFocRangeUpdatedBy")
+  createdFikFocSchemeRoutes          FikFocSchemeRoute[]           @relation("FikFocSchemeRouteCreatedBy")
+  updatedFikFocSchemeRoutes          FikFocSchemeRoute[]           @relation("FikFocSchemeRouteUpdatedBy")
+  createdAgencies                    Agency[]                      @relation("AgencyCreatedBy")
+  updatedAgencies                    Agency[]                      @relation("AgencyUpdatedBy")
+  registeredAgencyPayments           AgencyPayment[]               @relation("AgencyPaymentRegisteredBy")
+  registeredAgencyCharges            AgencyCharge[]                @relation("AgencyChargeRegisteredBy")
+  updatedAgencyCharges               AgencyCharge[]                @relation("AgencyChargeUpdatedBy")
+  createdAgencyCortes                AgencyCorte[]                 @relation("AgencyCorteCreatedBy")
+  auditLogs                          AuditLog[]                    @relation("AuditLogPerformedBy")
+  tripPlannings                      TripPlanning[]
+  createdManualBonuses               ManualBonus[]                 @relation("ManualBonusCreatedBy")
+  updatedManualBonuses               ManualBonus[]                 @relation("ManualBonusUpdatedBy")
+  createdSpecialServices             SpecialService[]              @relation("SpecialServiceCreatedBy")
+  updatedSpecialServices             SpecialService[]              @relation("SpecialServiceUpdatedBy")
+  createdNonWorkingDays              NonWorkingDay[]               @relation("NonWorkingDayCreatedBy")
+  updatedNonWorkingDays              NonWorkingDay[]               @relation("NonWorkingDayUpdatedBy")
+  createdMobileOperators             MobileOperator[]              @relation("MobileOperatorCreatedBy")
+  updatedMobileOperators             MobileOperator[]              @relation("MobileOperatorUpdatedBy")
+  createdMobileSkus                  MobileSku[]                   @relation("MobileSkuCreatedBy")
+  updatedMobileSkus                  MobileSku[]                   @relation("MobileSkuUpdatedBy")
+  orders                             Order[]                       @relation("CourtesyAuthorizerAdmin")
+}
+
+model AdminsDepartment {
+  id   String @id @default(uuid())
+  name String @unique
+  slug String @unique
+
+  roles  AdminDepartmentRole[]
+  admins Admin[]
+}
+
+model AdminDepartmentRole {
+  id                    String  @id @default(uuid())
+  name                  String  @unique
+  slug                  String  @unique
+  allowMultipleStations Boolean @default(true)
+
+  departmentId String
+  department   AdminsDepartment @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  permissions AdminDepartmentRolePermission[]
+  users       Admin[]
+}
+
+model Module {
+  id                        String       @id @default(uuid())
+  name                      String       @unique
+  slug                      String       @unique
+  resources                 String[]     @default([])
+  allowedAccesses           AccessType[] @default([])
+  createdAt                 DateTime     @default(now())
+  updatedAt                 DateTime     @updatedAt
+  restrictToAssociatedRoles Boolean      @default(false)
+
+  permissions      AdminDepartmentRolePermission[]
+  AdminsPermission AdminPermission[]
+}
+
+enum AccessType {
+  READ
+  CREATE
+  EDIT
+  DELETE
+  DEACTIVATE
+}
+
+model AdminDepartmentRolePermission {
+  id        String              @id @default(uuid())
+  roleId    String
+  role      AdminDepartmentRole @relation(fields: [roleId], references: [id])
+  moduleId  String
+  module    Module              @relation(fields: [moduleId], references: [id])
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  accesses AdminDepartmentRolePermissionAccess[]
+
+  @@unique([roleId, moduleId])
+}
+
+model AdminDepartmentRolePermissionAccess {
+  id               String                        @id @default(uuid())
+  rolePermissionId String
+  rolePermission   AdminDepartmentRolePermission @relation(fields: [rolePermissionId], references: [id])
+  access           AccessType
+
+  @@unique([rolePermissionId, access])
+}
+
+model AdminPermission {
+  id String @id @default(uuid())
+
+  userId   String
+  user     Admin  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  moduleId String
+  module   Module @relation(fields: [moduleId], references: [id])
+
+  accesses AdminPermissionAccess[]
+
+  @@unique([userId, moduleId])
+}
+
+model AdminPermissionAccess {
+  id           String          @id @default(uuid())
+  permissionId String
+  permission   AdminPermission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  access       AccessType
+
+  @@unique([permissionId, access])
+}
+
+model AdminSession {
+  id                   String   @id @default(uuid())
+  /// Cognito AuthenticationResult.AccessToken — nunca exponer en respuestas de API.
+  accessToken          String?
+  accessTokenExpiresAt DateTime
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  adminId String @unique
+  admin   Admin  @relation(fields: [adminId], references: [id], onDelete: Cascade)
+}
+
+model TripTemplate {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  file      String
+  routes    Route[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AdvisorUser {
+  id          String          @id @default(uuid())
+  key         String          @unique // Clave ER
+  name        String
+  shift       Shift
+  type        AdvisorUserType
+  isActive    Boolean         @default(true)
+  /// @deprecated saldo global reemplazado por AdvisorCashRegisterBalance (saldo por caja)
+  currentCash Decimal?        @db.Decimal(14, 2)
+  deletedAt   DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  stationId String
+  station   Station @relation(fields: [stationId], references: [id])
+
+  createdById String
+  createdBy   Admin   @relation("AdvisorUserCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?  @relation("AdvisorUserUpdatedBy", fields: [updatedById], references: [id])
+
+  account                  AdvisorAccount?
+  sessions                 AdvisorSession[]
+  orders                   Order[]
+  cashRegisters            CashRegister[]           @relation("CashRegisterActiveAdvisorUser")
+  cashRegisterShifts       CashRegisterShift[]
+  stationBalances          AdvisorStationBalance[]
+  statusHistoryChanged     OrderItemStatusHistory[] @relation("StatusHistoryChangedByAdvisor")
+  orderItemStatusHistories OrderItemStatusHistory[]
+
+  createdMiscellaneousSales MiscellaneousSale[] @relation("MiscellaneousSaleCreatedBy")
+  updatedMiscellaneousSales MiscellaneousSale[] @relation("MiscellaneousSaleUpdatedBy")
+
+  createdMiscellaneousSalesRecords MiscellaneousSalesRecord[] @relation("MiscellaneousSalesRecordCreatedBy")
+  updatedMiscellaneousSalesRecords MiscellaneousSalesRecord[] @relation("MiscellaneousSalesRecordUpdatedBy")
+  createdPrepaidCardSales          PrepaidCardSale[]          @relation("PrepaidCardSaleCreatedBy")
+  updatedPrepaidCardSales          PrepaidCardSale[]          @relation("PrepaidCardSaleUpdatedBy")
+  createdPrepaidCardClientDatas    PrepaidCardClientData[]    @relation("PrepaidCardClientDataCreatedBy")
+  updatedPrepaidCardClientDatas    PrepaidCardClientData[]    @relation("PrepaidCardClientDataUpdatedBy")
+  createdPrepaidCardRecharges      PrepaidCardRecharge[]      @relation("PrepaidCardRechargeCreatedBy")
+  updatedPrepaidCardRecharges      PrepaidCardRecharge[]      @relation("PrepaidCardRechargeUpdatedBy")
+
+  syncOfflineRequests    SyncOfflineRequest[]
+  createdMobilerecharges Mobilerecharge[]     @relation("MobilerechargeCreatedBy")
+  updatedMobilerecharges Mobilerecharge[]     @relation("MobilerechargeUpdatedBy")
+}
+
+model AdvisorAccount {
+  id                    String   @id @default(uuid())
+  password              String
+  lastChangedPasswordAt DateTime @default(now())
+  passwordExpiryDays    Int      @default(90)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  advisorId String      @unique
+  advisor   AdvisorUser @relation(fields: [advisorId], references: [id], onDelete: Cascade)
+}
+
+enum Shift {
+  MORNING
+  AFTERNOON
+  NIGHT
+}
+
+enum AdvisorUserType {
+  A
+  B
+  C
+  BCC
+}
+
+model AdvisorSession {
+  id                   String   @id @default(uuid())
+  accessToken          String   @unique
+  accessTokenExpiresAt DateTime
+  refreshToken         String   @unique
+  refreshExpiresAt     DateTime
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  advisorUserId String
+  advisorUser   AdvisorUser @relation(fields: [advisorUserId], references: [id], onDelete: Cascade)
+}
+
+model Promotion {
+  id             String       @id @default(uuid())
+  name           String
+  number         Int
+  maximumTickets Int?
+  ticketsSold    Int          @default(0)
+  discountType   DiscountType
+  discountValue  Float
+  ticketsPaid    Int? // solo para discountType = VOLUME
+  ticketLimit    Int? // solo para discountType = TICKET_LIMIT
+
+  discountAppliesTo      DiscountAppliesTo @default(ORDER_TOTAL)
+  discountTicketQuantity Int? // solo para discountAppliesTo = TICKET_QUANTITY
+
+  priority             Int              @default(0)
+  status               PromotionStatus  @default(CREATED)
+  beforeInactiveStatus PromotionStatus?
+  deletedAt            DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id])
+
+  purchaseValidity   PurchaseValidity?
+  oneWayTripValidity TripValidity?     @relation("OneWayTripValidity")
+  roundTripValidity  TripValidity?     @relation("RoundTripValidity")
+
+  createdById String
+  createdBy   Admin   @relation("PromotionCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?  @relation("PromotionUpdatedBy", fields: [updatedById], references: [id])
+
+  salesChannels   SalesChannel[]
+  tripTypes       PromotionTripType[]
+  paymentMethods  PromotionPaymentMethod[]
+  routes          Route[]
+  orderPromotions OrderPromotion[]
+  reservations    PromotionReservation[]
+
+  @@index([deletedAt])
+}
+
+model PromotionReservation {
+  id          String   @id @default(uuid())
+  promotionId String
+  quantity    Int
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  promotion Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+}
+
+enum PromotionStatus {
+  CREATED
+  ON_GOING
+  INACTIVE
+  FINISHED
+  EXPIRED
+  EXHAUSTED
+}
+
+model PurchaseValidity {
+  id        String   @id @default(uuid())
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  startTime DateTime @db.Time
+  endTime   DateTime @db.Time
+  allDays   Boolean
+
+  promotionId String?    @unique
+  promotion   Promotion? @relation(fields: [promotionId], references: [id])
+
+  couponCampaignId String?         @unique
+  couponCampaign   CouponCampaign? @relation(fields: [couponCampaignId], references: [id])
+
+  activeDays DayOfWeek[]
+}
+
+model TripValidity {
+  id        String   @id @default(uuid())
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  startTime DateTime @db.Time
+  endTime   DateTime @db.Time
+  allDays   Boolean
+  sameDay   Boolean  @default(false) //solo para RoundTripValidity
+
+  roundTrip   Promotion? @relation("RoundTripValidity", fields: [roundTripId], references: [id])
+  roundTripId String?    @unique
+  oneWay      Promotion? @relation("OneWayTripValidity", fields: [oneWayId], references: [id])
+  oneWayId    String?    @unique
+
+  couponRoundTrip   CouponCampaign? @relation("CouponRoundTripValidity", fields: [couponRoundTripId], references: [id])
+  couponRoundTripId String?         @unique
+  couponOneWay      CouponCampaign? @relation("CouponOneWayTripValidity", fields: [couponOneWayId], references: [id])
+  couponOneWayId    String?         @unique
+
+  activeDays DayOfWeek[]
+}
+
+model PromotionPaymentMethod {
+  id   String @id @default(uuid())
+  name String
+
+  promotions      Promotion[]
+  advanceSales    AdvanceSale[]
+  couponCampaigns CouponCampaign[]
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  VOLUME
+  TICKET_LIMIT
+}
+
+enum DiscountAppliesTo {
+  ORDER_TOTAL
+  TICKET_QUANTITY
+}
+
+enum DiscountSource {
+  PROMOTION
+  COUPON
+  ADVANCE_SALE
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum PromotionTripType {
+  ONE_WAY
+  ROUND_TRIP
+  ROUND_TRIP_RETURN_OPEN
+}
+
+enum Provider {
+  FACEBOOK
+  GOOGLE
+  TWITTER
+  APPLE
+}
+
+enum Gender {
+  FEMALE
+  MALE
+  UNSET
+}
+
+model Client {
+  id                              String                         @id @default(uuid())
+  email                           String?                        @unique @db.VarChar(254)
+  passwordHash                    String?                        @db.VarChar(255)
+  firstName                       String                         @db.VarChar(30)
+  lastNameMaternal                String?                        @db.VarChar(30)
+  lastNamePaternal                String                         @db.VarChar(30)
+  birthDate                       DateTime?                      @db.Date
+  phone                           String                         @db.Char(10)
+  status                          UserStatus                     @default(ACTIVE)
+  profilePhotoUrl                 String?                        @db.Text
+  postalCode                      String?                        @db.VarChar(6)
+  gender                          Gender?                        @default(UNSET)
+  accetpedTermsAndConditions      Boolean                        @default(false)
+  emailVerifiedAt                 DateTime?
+  createdAt                       DateTime                       @default(now())
+  updatedAt                       DateTime                       @updatedAt
+  lastLoginAt                     DateTime?
+  deletedAt                       DateTime?
+  socialAccounts                  ClientSocialAccount[]
+  sessions                        ClientSession[]
+  emailVerificationCodes          ClientEmailVerificationToken[]
+  passwordResetCodes              ClientPasswordResetToken[]
+  orders                          Order[]
+  PaymentMethodClient             PaymentMethodClient[]
+  orderItemStatusHistoriesChanged OrderItemStatusHistory[]       @relation("StatusHistoryChangedByClient")
+  orderItemStatusHistories        OrderItemStatusHistory[]
+  loyaltyWallet                   LoyaltyWallet?
+  clientOccupation                ClientOccupation?              @relation(fields: [clientOccupationid], references: [id])
+  clientOccupationid              String?
+  clientResponses                 ClientResponses[]
+  firebaseIdentities              ClientFirebaseIdentity[]
+}
+
+model ClientSocialAccount {
+  id                String   @id @default(uuid())
+  clientId          String
+  provider          Provider
+  providerUserId    String // id/sub del proveedor
+  emailFromProvider String?  @db.VarChar(254)
+  createdAt         DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@index([clientId])
+}
+
+enum FirebaseApp {
+  PLATAFORMA_DIGITAL
+  APP_EBUS
+}
+
+model ClientFirebaseIdentity {
+  id           String      @id @default(uuid())
+  clientId     String
+  firebaseApp  FirebaseApp @default(PLATAFORMA_DIGITAL)
+  firebaseUid  String      @db.VarChar(128)
+  passwordHash String?     @db.VarChar(255)
+  createdAt    DateTime    @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([firebaseApp, firebaseUid])
+  @@unique([clientId, firebaseApp])
+  @@index([clientId])
+}
+
+model ClientSession {
+  id                   String    @id @default(uuid())
+  clientId             String
+  accessToken          String    @unique
+  accessTokenExpiresAt DateTime
+  refreshTokenHash     String?   @unique
+  userAgent            String?   @db.VarChar(255)
+  ip                   String?   @db.VarChar(64)
+  revokedAt            DateTime?
+  createdAt            DateTime  @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, accessTokenExpiresAt])
+}
+
+model ClientEmailVerificationToken {
+  id         String    @id @default(uuid())
+  clientId   String
+  code       String    @db.Char(5)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, code])
+  @@index([expiresAt])
+}
+
+model ClientPasswordResetToken {
+  id         String    @id @default(uuid())
+  clientId   String
+  code       String    @db.Char(5)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  verifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, code])
+  @@index([expiresAt])
+}
+
+model ClientResponses {
+  id String @id @default(uuid())
+
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  questionId String
+  question   ClientQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  optionId String
+  option   QuestionOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model ClientQuestion {
+  id        String    @id @default(uuid())
+  question  String
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  isActive  Boolean   @default(true)
+
+  clientResponses ClientResponses[]
+
+  questionOptions QuestionOption[]
+}
+
+model QuestionOption {
+  id         String         @id @default(uuid())
+  text       String
+  isActive   Boolean        @default(true)
+  questionId String
+  question   ClientQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  clientResponses ClientResponses[]
+
+  @@index([questionId])
+}
+
+model ClientOccupation {
+  id         String    @id @default(uuid())
+  occupation String
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  isActive   Boolean   @default(true)
+  clients    Client[]
+}
+
+enum OrderType {
+  ONE_WAY
+  ROUND
+  OPEN
+  OPEN_ROUND
+  SURCHARGE
+  REFUND
+}
+
+enum OrderStatus {
+  AWAITING_PAYMENT
+  PAID
+  CHANGED
+  EXCHANGED
+  CANCELED
+  AWAITING_REFUND
+  REFUNDED
+  REFUND_FAILED
+}
+
+enum TicketStatus {
+  PAID
+  EXCHANGED
+  NOT_EXCHANGED
+  TRAVELED
+  NOT_TRAVELED
+  CANCELED
+  APPROACHED
+  EXPIRED
+}
+
+enum ReferenceStatus {
+  ACTIVE
+  REDEEMED
+}
+
+enum PaymentStatus {
+  REQUIRES_ACTION
+  PENDING
+  CAPTURED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CASH
+  MIT
+  MPAGO
+  STRIPE
+  POINTS
+  NO_CHARGE
+}
+
+model Order {
+  id String @id @default(uuid())
+
+  // Relaciones padre
+  clientId          String?
+  client            Client?            @relation(fields: [clientId], references: [id])
+  advisorId         String?
+  Advisor           AdvisorUser?       @relation(fields: [advisorId], references: [id])
+  surchargeOriginId String?
+  surchargeOrigin   Order?             @relation("OrderSurchargeOrigin", fields: [surchargeOriginId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  orderItemOriginId String?
+  salesChannelId    String?
+  salesChannel      SalesChannel?      @relation(fields: [salesChannelId], references: [id])
+  cashRegisterId    String?
+  cashRegister      CashRegister?      @relation(fields: [cashRegisterId], references: [id])
+  shiftId           String?
+  shift             CashRegisterShift? @relation(fields: [shiftId], references: [id])
+
+  type             OrderType
+  surchargeType    SurchargeType @default(NORMAL)
+  triggeringRuleId String?
+  invoiceCode      String?
+  isInvoiced       Boolean       @default(false)
+  status           OrderStatus   @default(AWAITING_PAYMENT)
+  paymentMethod    PaymentMethod @default(CASH)
+
+  // Montos
+  subtotal       Decimal  @db.Decimal(12, 2)
+  discount       Decimal  @default(0) @db.Decimal(12, 2)
+  taxIVA         Decimal  @default(0) @db.Decimal(12, 2)
+  total          Decimal  @db.Decimal(12, 2)
+  moneyExchanged Decimal? @default(0) @db.Decimal(12, 2)
+  cashReceived   Decimal? @db.Decimal(12, 2)
+
+  // Referencias del proveedor
+  provider          String? // 'stripe' | 'mpago' | 'conekta' | ...
+  providerIntentId  String?
+  providerPaymentId String?
+
+  // Datos de contacto
+  guestName  String?
+  invoiceRfc String? // RFC para facturación de la venta (RFC_CLIENTE en reporte de agencias)
+  email      String?
+  phone      String?
+
+  // Datos MIT
+  mitTransactionDate     DateTime?
+  mitTransactionNumber   String?
+  mitAuthorizationNumber String?
+
+  courtesyAuthorizerAdminId String?
+  courtesyAuthorizerAdmin   Admin?  @relation("CourtesyAuthorizerAdmin", fields: [courtesyAuthorizerAdminId], references: [id])
+
+  // Refund tracking (solo aplican cuando type=REFUND con paymentMethod=MIT)
+  mitRefundId         String?
+  refundedAt          DateTime?
+  refundFailureReason String?
+
+  // Snapshot de penalties calculadas en prepareRefund (CANCEL MIT) usadas en confirmRefund
+  penaltiesSnapshot Json?
+
+  // Pago con puntos de lealtad (Biger)
+  loyaltyPointsUsed    Int? // puntos descontados del wallet del cliente
+  bigerCorrelationId   String? @unique // ID de correlación enviado a Biger para vincular la redención
+  bigerAuthorizationId String? // folio de autorización devuelto por Biger al confirmar el descuento
+
+  // Fechas clave
+  expiresAt DateTime?
+  issuedAt  DateTime? // cuándo se “emitió” el boleto (opcional)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Indicadores rapidos
+  hasPromotion   Boolean @default(false)
+  hasAdvanceSale Boolean @default(false)
+  hasCoupon      Boolean @default(false)
+
+  surcharges               Order[]                   @relation("OrderSurchargeOrigin")
+  items                    OrderItem[]
+  OrderStatusHistory       OrderStatusHistory[]
+  ticketMovementsSurcharge OrderItemStatusHistory[]  @relation("TicketMovementSurcharge")
+  ticketMovementsRefund    OrderItemStatusHistory[]  @relation("TicketMovementRefund")
+  ticketMovementsPenalty   OrderItemStatusHistory[]  @relation("TicketMovementPenalty")
+  appliedPromotion         OrderPromotion?
+  appliedAdvanceSale       OrderAdvanceSale?
+  appliedCoupon            OrderCoupon?
+  SyncOfflineRequestOrder  SyncOfflineRequestOrder[]
+  pendingTicketMovement    PendingTicketMovement?
+
+  @@unique([surchargeOriginId, orderItemOriginId, triggeringRuleId], map: "Order_penalty_idempotency", where: { type: "SURCHARGE", surchargeType: "PENALTY" })
+  @@index([clientId])
+  @@index([cashRegisterId])
+  @@index([shiftId])
+  @@index([expiresAt])
+}
+
+model PendingTicketMovement {
+  id                 String   @id @default(uuid())
+  orderId            String   @unique
+  order              Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  ticketId           String
+  newSeatId          String
+  newSegmentId       String?
+  movementType       String
+  advisorId          String
+  salesChannelId     String
+  cancellationReason String   @default("Cancelado por cambio")
+  newBasePrice       Decimal  @db.Decimal(12, 2)
+  newTax             Decimal  @db.Decimal(12, 2)
+  newDiscount        Decimal  @db.Decimal(12, 2)
+  newTotalPrice      Decimal  @db.Decimal(12, 2)
+  surchargeAmount    Decimal  @db.Decimal(12, 2)
+  penaltiesSnapshot  Json?
+  createdAt          DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model PendingGroupMovement {
+  id                 String   @id @default(uuid())
+  originOrderId      String
+  movementType       String
+  advisorId          String
+  salesChannelId     String
+  cancellationReason String   @default("Cancelado por cambio")
+  itemsSnapshot      Json
+  totalAmount        Decimal  @db.Decimal(12, 2)
+  expiresAt          DateTime
+  createdAt          DateTime @default(now())
+
+  @@index([advisorId])
+  @@index([expiresAt])
+}
+
+model OrderStatusHistory {
+  id          String      @id @default(uuid())
+  orderId     String
+  status      OrderStatus
+  orderItemId String?
+  changedById String?
+  createdAt   DateTime    @default(now())
+
+  order     Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItem OrderItem? @relation("OrderItemHistory", fields: [orderItemId], references: [id])
+
+  @@index([orderId])
+}
+
+model OrderPromotion {
+  id           String      @id @default(uuid())
+  orderId      String      @unique
+  order        Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  promotionId  String?
+  promotion    Promotion?  @relation(fields: [promotionId], references: [id])
+  couponCodeId String?
+  couponCode   CouponCode? @relation(fields: [couponCodeId], references: [id])
+
+  promotionName  String
+  discountType   DiscountType
+  discountValue  Decimal      @db.Decimal(10, 2)
+  discountAmount Decimal      @db.Decimal(10, 2)
+  originalPrice  Decimal      @db.Decimal(10, 2)
+  ticketsApplied Int
+
+  appliedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([promotionId])
+}
+
+model OrderAdvanceSale {
+  id                String          @id @default(uuid())
+  orderId           String          @unique
+  order             Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  advanceSaleId     String
+  advanceSale       AdvanceSale     @relation(fields: [advanceSaleId], references: [id])
+  advanceSaleRuleId String
+  advanceSaleRule   AdvanceSaleRule @relation(fields: [advanceSaleRuleId], references: [id])
+
+  advanceSaleName String
+  discountPercent Int
+  discountAmount  Decimal @db.Decimal(10, 2)
+  ticketsApplied  Int
+
+  appliedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([advanceSaleId])
+  @@index([advanceSaleRuleId])
+}
+
+model OrderItemStatusHistory {
+  id                      String         @id @default(uuid())
+  orderItemId             String
+  orderItem               OrderItem      @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  movementType            OrderStatus
+  oldTripSeatId           String?
+  oldBasePrice            Decimal?       @db.Decimal(10, 2)
+  oldTax                  Decimal?       @db.Decimal(10, 2)
+  oldDiscount             Decimal?       @db.Decimal(10, 2)
+  oldTotalPrice           Decimal?       @db.Decimal(10, 2)
+  oldStatus               TicketStatus?
+  oldTripId               String?
+  oldDeparture            DateTime?
+  oldArrival              DateTime?
+  oldRouteId              String?
+  oldRouteNumber          String?
+  oldOriginId             String?
+  oldOriginName           String?
+  oldOriginShortName      String?
+  oldDestinationId        String?
+  oldDestinationName      String?
+  oldDestinationShortName String?
+  oldSeatNumber           Int?
+  oldServiceShortName     String?
+  oldServiceId            String?
+  oldCompanyId            String?
+  oldPaymentMethod        PaymentMethod?
+  oldTripSegmentId        String?
+  oldTripSegment          TripSegment?   @relation(fields: [oldTripSegmentId], references: [id])
+  surchargeOrderId        String?
+  surcharge               Order?         @relation("TicketMovementSurcharge", fields: [surchargeOrderId], references: [id])
+  refundOrderId           String?
+  refund                  Order?         @relation("TicketMovementRefund", fields: [refundOrderId], references: [id])
+  penaltyOrderId          String?
+  penalty                 Order?         @relation("TicketMovementPenalty", fields: [penaltyOrderId], references: [id])
+  reason                  String?
+  changedByAdvisorId      String?
+  changedByAdvisor        AdvisorUser?   @relation("StatusHistoryChangedByAdvisor", fields: [changedByAdvisorId], references: [id])
+  salesChannelId          String?
+  salesChannel            SalesChannel?  @relation(fields: [salesChannelId], references: [id])
+  changedByClientId       String?
+  changedByClient         Client?        @relation("StatusHistoryChangedByClient", fields: [changedByClientId], references: [id])
+
+  // Campos para tracking de nuevo folio en cambios/canjes
+  oldTicketNumber String?
+  oldOrderItemId  String?
+  newTicketNumber String?
+  newOrderItemId  String?
+
+  createdAt      DateTime           @default(now())
+  advisorUser    AdvisorUser?       @relation(fields: [advisorUserId], references: [id])
+  advisorUserId  String?
+  clientId       String?
+  client         Client?            @relation(fields: [clientId], references: [id])
+  shiftId        String?
+  shift          CashRegisterShift? @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  cashRegisterId String?
+  cashRegister   CashRegister?      @relation(fields: [cashRegisterId], references: [id], onDelete: SetNull)
+
+  @@index([orderItemId])
+  @@index([movementType])
+  @@index([createdAt])
+  @@index([oldTripId])
+  @@index([shiftId])
+  @@index([cashRegisterId])
+}
+
+model OrderItem {
+  id            String  @id @default(uuid())
+  ticketNumber  String  @unique
+  ticketTraceId String? @default(dbgenerated("gen_random_uuid()"))
+
+  basePrice  Decimal @db.Decimal(10, 2)
+  tax        Decimal @default(0) @db.Decimal(10, 2)
+  discount   Decimal @default(0) @db.Decimal(10, 2)
+  totalPrice Decimal @db.Decimal(10, 2)
+
+  status                       TicketStatus    @default(PAID)
+  hasPromotion                 Boolean         @default(false)
+  discountSource               DiscountSource?
+  passengerTypeDiscountPercent Int?
+  isInvoiced                   Boolean         @default(false)
+  ineId                        String?
+  invoiceCode                  String?
+  referenceId                  String?
+
+  canceledAt     DateTime?
+  canceledReason String?
+  isRoundOpen    Boolean   @default(false)
+  isOutbound     Boolean? // true = Ida, false = Regreso, null = Sencillos/Abiertos
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orderId             String
+  order               Order                    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  tripSeatId          String?
+  tripSeat            TripSeat?                @relation(fields: [tripSeatId], references: [id])
+  routeId             String?
+  route               Route?                   @relation(fields: [routeId], references: [id])
+  segmentId           String?
+  segment             Segment?                 @relation(fields: [segmentId], references: [id])
+  reference           TicketReference?         @relation(fields: [referenceId], references: [id])
+  passenger           Passenger?
+  statusHistory       OrderStatusHistory[]     @relation("OrderItemHistory")
+  movementHistory     OrderItemStatusHistory[]
+  loyaltyTransactions LoyaltyTransaction[]
+  agencyCharge        AgencyCharge?
+  offlineRecord       OrderItemOffline?
+
+  @@unique([tripSeatId, segmentId]) // Evita duplicados: mismo asiento + mismo segmento
+  @@index([orderId])
+  @@index([referenceId])
+  @@index([ticketTraceId]) // Búsqueda de cadena completa en O(1)
+}
+
+/// Contador de folios por estación+minuto+canal. Una sola sentencia
+/// (INSERT .. ON CONFLICT DO UPDATE .. RETURNING) reserva el lote completo sin
+/// candados de aplicación; ver `@shared/utils/ticket-number.util`.
+/// `prefix` = SSSS + TTTTTTTT + C (13 caracteres).
+model FolioCounter {
+  prefix     String @id
+  lastSuffix Int
+}
+
+model TicketReference {
+  id        String          @id @default(uuid())
+  code      String          @unique
+  status    ReferenceStatus @default(ACTIVE)
+  items     OrderItem[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+model Passenger {
+  id String @id @default(uuid())
+
+  name            String
+  isMainPassenger Boolean        @default(false)
+  passengerTypeId String?
+  passengerType   PassengerType? @relation(fields: [passengerTypeId], references: [id])
+
+  orderItemId String    @unique
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+}
+
+enum PaymentProvider {
+  MERCADOPAGO
+}
+
+enum PaymentMethodStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+  DELETED
+}
+
+model PaymentMethodClient {
+  id                 String          @id @default(uuid())
+  userId             String
+  client             Client?         @relation(fields: [userId], references: [id])
+  providerPayment    PaymentProvider
+  providerCustomerId String
+  providerCardId     String
+
+  type       String?
+  brand      String?
+  lastFour   String?
+  expMonth   Int?
+  expYear    Int?
+  holderName String?
+  funding    String?
+  isDefault  Boolean             @default(false)
+  status     PaymentMethodStatus @default(ACTIVE)
+  metadata   Json?
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  deletedAt  DateTime?
+
+  @@unique([userId, providerPayment, providerCardId])
+  @@index([userId, providerPayment])
+}
+
+model Operator {
+  id String @id @default(uuid())
+
+  // ---  HCM ---
+  key             String    @unique // CLAVE_OPERADOR
+  name            String // NOMBRE_DE_OPERADOR
+  type            String // TIPO_DE_OPERADOR
+  activeDays      Int // DIAS_ACTIVO
+  hireDate        DateTime  @db.Date // FECHA_DE_CONTRATACION
+  terminationDate DateTime? @db.Date // FECHA_DE_BAJA
+  status          String // ESTATUS_ASIGNACION
+
+  tripStatus OperatorTripStatus @default(AVAILABLE)
+
+  // --- TomTom / InRoute ---
+  tomTomConductorId Int? @unique // nConductor en InRoute
+
+  serviceId String?
+  service   Service? @relation(fields: [serviceId], references: [id])
+  stationId String?
+  station   Station? @relation(fields: [stationId], references: [id])
+
+  // --- Audit ---
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  trips           Trip[]
+  buses           Bus[]
+  tomTomGroups    TomTomGroup[]
+  tripPlannings   TripPlanning[]
+  tripDispatches  TripDispatch[]
+  manualBonuses   ManualBonus[]
+  specialServices SpecialService[]
+
+  account       OperatorAccount?
+  sessions      OperatorSession[]
+  cashRegisters CashRegister[]    @relation("CashRegisterActiveOperator")
+}
+
+model OperatorAccount {
+  id        String   @id @default(uuid())
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  operatorId String   @unique
+  operator   Operator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+}
+
+model OperatorSession {
+  id                   String   @id @default(uuid())
+  accessToken          String   @unique
+  accessTokenExpiresAt DateTime
+  refreshToken         String   @unique
+  refreshExpiresAt     DateTime
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  operatorId String
+  operator   Operator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+}
+
+model TripPlanning {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tripId     String   @unique
+  trip       Trip     @relation(fields: [tripId], references: [id])
+  operatorId String
+  operator   Operator @relation(fields: [operatorId], references: [id])
+  busId      String
+  bus        Bus      @relation(fields: [busId], references: [id])
+
+  createdById String
+  createdBy   Admin  @relation(fields: [createdById], references: [id])
+
+  @@index([operatorId])
+  @@index([busId])
+}
+
+model TripDispatch {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tripId     String   @unique
+  trip       Trip     @relation(fields: [tripId], references: [id])
+  operatorId String
+  operator   Operator @relation(fields: [operatorId], references: [id])
+  busId      String
+  bus        Bus      @relation(fields: [busId], references: [id])
+
+  @@index([operatorId])
+  @@index([busId])
+}
+
+enum ShiftType {
+  MORNING // Matutina
+  EVENING // Vespertina
+  MIXED // Combinado
+}
+
+model Bus {
+  id                     String    @id @default(uuid())
+  economicNumber         String    @unique
+  serialNumber           String    @unique
+  tagNumber              String    @unique
+  plates                 String
+  brand                  String
+  model                  Int
+  type                   BusType
+  status                 BusStatus @default(ACTIVE)
+  seatCount              Int
+  initialKm              Int       @default(0)
+  currentKm              Int
+  maintenanceKmLimit     Int
+  maintenanceAlertKm     Int
+  lastKilometersTraveled Int?
+  statusChangeReason     String?
+  lastMaintenanceDate    DateTime? @db.Date
+  deletedAt              DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  stationId        String
+  station          Station @relation(fields: [stationId], references: [id])
+  // --- TomTom / InRoute ---
+  tomTomVehiculoId Int?    @unique // nVehiculo en InRoute
+
+  serviceId  String
+  service    Service   @relation(fields: [serviceId], references: [id])
+  operatorId String?
+  operator   Operator? @relation(fields: [operatorId], references: [id])
+
+  createdById String
+  createdBy   Admin   @relation("BusCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?  @relation("BusUpdatedBy", fields: [updatedById], references: [id])
+
+  trips          Trip[]
+  maintenances   BusMaintenance[]
+  tomTomGroups   TomTomGroup[]
+  tripPlannings  TripPlanning[]
+  tripDispatches TripDispatch[]
+}
+
+model BusMaintenance {
+  id              String   @id @default(uuid())
+  maintenanceAtKm Int
+  maintenanceDate DateTime @db.Date
+  createdAt       DateTime @default(now())
+
+  busId String
+  bus   Bus    @relation(fields: [busId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   Admin  @relation("BusMaintenanceCreatedBy", fields: [createdById], references: [id])
+
+  @@index([busId])
+  @@index([maintenanceDate])
+  @@index([maintenanceAtKm])
+}
+
+enum BusType {
+  BUS
+  MINIBUS
+  MINIVAN
+  SPRINTER
+  VAN
+}
+
+enum BusStatus {
+  ACTIVE
+  DEACTIVATED
+  MAINTENANCE
+  OUT_OF_SERVICE
+  WRECKED //Siniestrada
+  ASSIGNED_TO_TRIP
+  ON_TRIP
+}
+
+enum OperatorTripStatus {
+  AVAILABLE
+  ON_TRIP
+}
+
+model AdvanceSale {
+  id             String          @id @default(uuid())
+  name           String
+  number         Int
+  maximumTickets Int?
+  ticketsSold    Int             @default(0)
+  status         PromotionStatus @default(CREATED)
+  validFrom      DateTime        @db.Date
+  validTo        DateTime        @db.Date
+  allDays        Boolean         @default(true)
+  activeDays     DayOfWeek[]
+  deletedAt      DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id])
+
+  createdById String
+  createdBy   Admin   @relation("AdvanceSaleCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?  @relation("AdvanceSaleUpdatedBy", fields: [updatedById], references: [id])
+
+  salesChannels         SalesChannel[]
+  tripTypes             PromotionTripType[]
+  paymentMethods        PromotionPaymentMethod[]
+  routes                Route[]
+  rules                 AdvanceSaleRule[]
+  orders                OrderAdvanceSale[]
+  reservations          AdvanceSaleReservation[]
+  tripAdvanceSaleUsages TripAdvanceSaleUsage[]
+
+  @@index([deletedAt])
+}
+
+model AdvanceSaleRule {
+  id              String       @id @default(uuid())
+  hourBefore      Int
+  discountPercent Int
+  maxPassengers   Int
+  maxUses         Int          @default(1)
+  discountType    DiscountType @default(PERCENTAGE)
+  priority        Int          @default(1)
+  ticketsSold     Int          @default(0)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  advanceSale   AdvanceSale @relation(fields: [advanceSaleId], references: [id], onDelete: Cascade)
+  advanceSaleId String
+
+  orders                    OrderAdvanceSale[]
+  reservations              AdvanceSaleReservation[]
+  tripAdvanceSaleRuleUsages TripAdvanceSaleRuleUsage[]
+}
+
+model AdvanceSaleReservation {
+  id            String   @id @default(uuid())
+  advanceSaleId String
+  ruleId        String
+  tripId        String?
+  quantity      Int
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+
+  advanceSale AdvanceSale     @relation(fields: [advanceSaleId], references: [id], onDelete: Cascade)
+  rule        AdvanceSaleRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId, tripId, expiresAt])
+}
+
+model TripAdvanceSaleUsage {
+  usageCount Int @default(0)
+
+  tripId        String
+  trip          Trip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  advanceSaleId String
+  advanceSale   AdvanceSale @relation(fields: [advanceSaleId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([tripId, advanceSaleId])
+  @@index([tripId])
+  @@index([advanceSaleId])
+}
+
+model TripAdvanceSaleRuleUsage {
+  usageCount Int @default(0)
+
+  tripId String
+  trip   Trip            @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  ruleId String
+  rule   AdvanceSaleRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([tripId, ruleId])
+  @@index([tripId])
+  @@index([ruleId])
+}
+
+model CouponCampaign {
+  id                   String           @id @default(uuid())
+  number               Int
+  name                 String
+  description          String?
+  prefix               String?          @db.VarChar(10)
+  quantityToGenerate   Int?
+  status               PromotionStatus  @default(CREATED)
+  beforeInactiveStatus PromotionStatus?
+  discountType         DiscountType
+  discountValue        Int
+  ticketsPaid          Int? // solo para discountType = VOLUME
+  ticketLimit          Int? // solo para discountType = TICKET_LIMIT
+
+  discountAppliesTo      DiscountAppliesTo @default(ORDER_TOTAL)
+  discountTicketQuantity Int? // solo para discountAppliesTo = TICKET_QUANTITY
+
+  campaignType   CampaignType @default(SINGLE_CODE)
+  maxUsesPerCode Int          @default(1)
+
+  purchaseValidity   PurchaseValidity?
+  oneWayTripValidity TripValidity?     @relation("CouponOneWayTripValidity")
+  roundTripValidity  TripValidity?     @relation("CouponRoundTripValidity")
+
+  purchasePassengerTypeId String?
+  purchasePassengerType   PassengerType? @relation(name: "CouponCampaignPurchasePassengerType", fields: [purchasePassengerTypeId], references: [id])
+  deliveryPassengerTypeId String?
+  deliveryPassengerType   PassengerType? @relation(name: "CouponCampaignDeliveryPassengerType", fields: [deliveryPassengerTypeId], references: [id])
+
+  createdById String
+  createdBy   Admin   @relation("CouponCampaignCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?  @relation("CouponCampaignUpdatedBy", fields: [updatedById], references: [id])
+
+  routes         Route[]
+  companies      Company[]
+  salesChannels  SalesChannel[]
+  paymentMethods PromotionPaymentMethod[]
+  tripTypes      PromotionTripType[]
+  coupons        CouponCode[]
+  services       Service[]                @relation("CouponCampaignServices")
+  orderCoupons   OrderCoupon[]
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([deletedAt])
+}
+
+model CouponCode {
+  id   String @id @default(uuid())
+  code String @unique
+
+  status      CouponStatus @default(ACTIVE)
+  currentUses Int          @default(0)
+  maxUses     Int          @default(1)
+
+  campaignId String
+  campaign   CouponCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orderPromotions OrderPromotion[]
+  orderCoupons    OrderCoupon[]
+
+  @@index([campaignId])
+}
+
+enum CampaignType {
+  SINGLE_CODE
+  PACKAGE
+}
+
+enum CouponStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+  EXHAUSTED
+}
+
+model OrderCoupon {
+  id      String @id @default(uuid())
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  couponCodeId String
+  couponCode   CouponCode     @relation(fields: [couponCodeId], references: [id])
+  campaignId   String
+  campaign     CouponCampaign @relation(fields: [campaignId], references: [id])
+
+  // Datos congelados al momento de la compra
+  campaignName    String
+  couponCodeValue String
+  discountType    DiscountType
+  discountValue   Decimal      @db.Decimal(10, 2)
+  discountAmount  Decimal      @db.Decimal(10, 2)
+  originalPrice   Decimal      @db.Decimal(10, 2)
+  ticketsApplied  Int
+
+  appliedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([couponCodeId])
+  @@index([campaignId])
+}
+
+model MiscellaneousType {
+  id          String    @id @default(uuid())
+  type        String
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  hasStock    Boolean   @default(false)
+  createdById String?
+  createdBy   Admin?    @relation("MiscellaneousTypeCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?    @relation("MiscellaneousTypeUpdatedBy", fields: [updatedById], references: [id])
+
+  miscellaneousProduct MiscellaneousProduct[]
+}
+
+model MiscellaneousProduct {
+  id          String  @id @default(uuid())
+  sku         String  @unique
+  name        String
+  description String?
+
+  miscellaneousTypeId String
+  miscellaneousType   MiscellaneousType @relation(fields: [miscellaneousTypeId], references: [id])
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  createdById String?
+  createdBy   Admin?  @relation("MiscellaneousProductCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?  @relation("MiscellaneousProductUpdatedBy", fields: [updatedById], references: [id])
+
+  companies MiscellaneousProductCompany[]
+  stations  MiscellaneousProductStation[]
+
+  miscellaneousSalesRecords MiscellaneousSalesRecord[]
+}
+
+model MiscellaneousProductCompany {
+  id                     String               @id @default(uuid())
+  miscellaneousProductId String
+  miscellaneousProduct   MiscellaneousProduct @relation(fields: [miscellaneousProductId], references: [id])
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  createdById String?
+  createdBy   Admin?  @relation("MiscellaneousProductCompanyCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?  @relation("MiscellaneousProductCompanyUpdatedBy", fields: [updatedById], references: [id])
+}
+
+model MiscellaneousProductStation {
+  id           String  @id @default(uuid())
+  price        Decimal @default(0.00) @db.Decimal(10, 2)
+  minStock     Int     @default(0)
+  currentStock Int     @default(0)
+  isActive     Boolean @default(true)
+  appliedIVA   Boolean @default(false)
+  apliedStock  Boolean @default(true)
+
+  miscellaneousProductId String
+  miscellaneousProduct   MiscellaneousProduct @relation(fields: [miscellaneousProductId], references: [id])
+
+  stationId String
+  station   Station @relation(fields: [stationId], references: [id])
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  createdById String?
+  createdBy   Admin?  @relation("MiscellaneousProductStationCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?  @relation("MiscellaneousProductStationUpdatedBy", fields: [updatedById], references: [id])
+}
+
+model Notification {
+  id         String   @id @default(uuid())
+  title      String
+  message    String
+  read       Boolean  @default(false)
+  redirectTo String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  adminId    String
+
+  admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+}
+
+model TicketFormat {
+  id        String  @id @default(uuid())
+  name      String
+  legalText String
+  isActive  Boolean @default(true)
+
+  serviceId  String
+  service    Service @relation(fields: [serviceId], references: [id])
+  logoFileId String  @unique
+  logo       File    @relation("TicketFormatLogo", fields: [logoFileId], references: [id])
+
+  createdById String
+  createdBy   Admin   @relation("TicketFormatCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?  @relation("TicketFormatUpdatedBy", fields: [updatedById], references: [id])
+
+  promotions TicketPromotion[]
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model TicketPromotion {
+  id          String @id @default(uuid())
+  title       String
+  description String
+  order       Int    @default(0)
+
+  ticketFormatId String
+  ticketFormat   TicketFormat @relation(fields: [ticketFormatId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ticketFormatId])
+}
+
+model BoardingSale {
+  id         String @id @default(uuid())
+  smartmacId Int    @unique // idempotency: id sent by SmartMac
+
+  travelCardId String?
+  travelCard   TravelCard? @relation(fields: [travelCardId], references: [id])
+
+  externalTripId       Int
+  tripKey              String
+  operatorKey          String
+  externalRouteId      Int
+  externalTravelCardId Int
+  cardFolio            String?
+
+  totalAmount      Decimal  @db.Decimal(12, 2)
+  totalTicketsSold Int
+  exchangeTickets  String?
+  cashTickets      String?
+  prepaidTickets   String?
+  reloadTickets    String?
+  tripStatus       String?
+  cardStatus       String?
+  saleDate         DateTime
+
+  createdAt DateTime @default(now())
+
+  items BoardingSaleItem[]
+
+  @@index([externalTripId])
+  @@index([travelCardId])
+}
+
+model BoardingSaleItem {
+  id             String       @id @default(uuid())
+  boardingSaleId String
+  boardingSale   BoardingSale @relation(fields: [boardingSaleId], references: [id], onDelete: Cascade)
+
+  externalTicketId Int
+  ticketFolio      Int         @unique // unique folio per business rule
+  billingCode      String?
+  soldAt           DateTime
+  ticketAmount     Decimal     @db.Decimal(10, 2)
+  seatNumber       Int
+  fareId           Int
+  prepaidCard      String?
+  paymentType      PaymentType
+  passengerType    String // dynamic, SmartMac sends string (e.g. "ADULTO")
+  segmentId        Int // external segment ID from SmartMac (tramoId)
+
+  @@index([boardingSaleId])
+}
+
+model FrequentCustomer {
+  id     String  @id @default(uuid())
+  number String  @unique
+  email  String?
+  name   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum MiscellaneousSaleStatus {
+  PENDING // Venta creada, esperando confirmación de pago
+  PROCESSING // Recarga TiempoAire iniciada, esperando respuesta del proveedor
+  PAID // Pago confirmado
+  CANCELLED // Cancelada (pago falló o no se confirmó)
+}
+
+model MiscellaneousSale {
+  id             String                  @id @default(uuid())
+  idempotencyKey String?                 @unique
+  status         MiscellaneousSaleStatus @default(PENDING)
+  saleDate       DateTime                @default(now())
+  totalSale      Decimal                 @db.Decimal(12, 2)
+  netSale        Decimal                 @db.Decimal(12, 2)
+
+  paymentMethod PaymentMethod @default(CASH)
+  ivaApplied    Boolean       @default(false)
+  cashChangeDue Decimal?      @db.Decimal(12, 2)
+  cashReceived  Decimal?      @db.Decimal(12, 2)
+  ivaAmount     Decimal       @db.Decimal(12, 2)
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  stationId String
+  station   Station @relation(fields: [stationId], references: [id])
+
+  cashRegisterId String
+  cashRegister   CashRegister @relation(fields: [cashRegisterId], references: [id])
+
+  shiftId String?
+  shift   CashRegisterShift? @relation(fields: [shiftId], references: [id])
+
+  mitAuthorizationNumber String?
+  mitTransactionNumber   String?
+  mitTransactionDate     DateTime?
+
+  providerTransactionId String?
+  phone                 String?    @db.VarChar(10)
+  mobileSkuId           String?
+  mobileSku             MobileSku? @relation("MiscellaneousSaleMobileSku", fields: [mobileSkuId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  createdById               String?
+  createdBy                 AdvisorUser?               @relation("MiscellaneousSaleCreatedBy", fields: [createdById], references: [id])
+  updatedById               String?
+  updatedBy                 AdvisorUser?               @relation("MiscellaneousSaleUpdatedBy", fields: [updatedById], references: [id])
+  miscellaneousSalesRecords MiscellaneousSalesRecord[]
+  mobilerecharges           Mobilerecharge[]
+
+  @@index([shiftId])
+}
+
+model PrepaidCardSale {
+  id                String   @id @default(uuid())
+  saleDate          DateTime @default(now())
+  activationAmount  Decimal  @db.Decimal(12, 2)
+  prepaidCardNumber String
+
+  paymentMethod PaymentMethod @default(CASH)
+  ivaApplied    Boolean       @default(false)
+  cashChangeDue Decimal       @db.Decimal(12, 2)
+  cashReceived  Decimal       @db.Decimal(12, 2)
+  ivaAmount     Decimal       @db.Decimal(12, 2)
+
+  stationId String
+  station   Station @relation(fields: [stationId], references: [id])
+
+  cashRegisterId String
+  cashRegister   CashRegister @relation(fields: [cashRegisterId], references: [id])
+
+  shiftId String?
+  shift   CashRegisterShift? @relation(fields: [shiftId], references: [id])
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  createdById String?
+  createdBy   AdvisorUser? @relation("PrepaidCardSaleCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   AdvisorUser? @relation("PrepaidCardSaleUpdatedBy", fields: [updatedById], references: [id])
+
+  @@index([shiftId])
+}
+
+model PrepaidCardClientData {
+  id       String @id @default(uuid())
+  fullName String
+  email    String @db.VarChar(254)
+  phone    String @db.Char(10)
+
+  prepaidCardNumber String
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  createdById String?
+  createdBy   AdvisorUser? @relation("PrepaidCardClientDataCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   AdvisorUser? @relation("PrepaidCardClientDataUpdatedBy", fields: [updatedById], references: [id])
+}
+
+model PrepaidCardRecharge {
+  id            String        @id @default(uuid())
+  rechargeDate  DateTime      @default(now())
+  amount        Decimal       @db.Decimal(12, 2)
+  paymentMethod PaymentMethod @default(CASH)
+  ivaApplied    Boolean       @default(false)
+  cashChangeDue Decimal       @db.Decimal(12, 2)
+  cashReceived  Decimal       @db.Decimal(12, 2)
+  ivaAmount     Decimal       @db.Decimal(12, 2)
+  bonusAmount   Decimal       @db.Decimal(12, 2)
+  lastBalance   Decimal       @db.Decimal(12, 2)
+
+  prepaidCardNumber String
+
+  stationId String
+  station   Station @relation(fields: [stationId], references: [id])
+
+  cashRegisterId String
+  cashRegister   CashRegister @relation(fields: [cashRegisterId], references: [id])
+
+  shiftId String?
+  shift   CashRegisterShift? @relation(fields: [shiftId], references: [id])
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  createdById String?
+  createdBy   AdvisorUser? @relation("PrepaidCardRechargeCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   AdvisorUser? @relation("PrepaidCardRechargeUpdatedBy", fields: [updatedById], references: [id])
+
+  @@index([shiftId])
+}
+
+model MiscellaneousSalesRecord {
+  id                     String               @id @default(uuid())
+  miscellaneousProductId String
+  miscellaneousProduct   MiscellaneousProduct @relation(fields: [miscellaneousProductId], references: [id])
+
+  quantity  Int
+  totalSale Decimal @db.Decimal(12, 2)
+  ivaAmount Decimal @db.Decimal(12, 2)
+  netSale   Decimal @db.Decimal(12, 2)
+
+  miscellaneousSaleId String
+  miscellaneousSale   MiscellaneousSale @relation(fields: [miscellaneousSaleId], references: [id])
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  createdById String?
+  createdBy   AdvisorUser? @relation("MiscellaneousSalesRecordCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   AdvisorUser? @relation("MiscellaneousSalesRecordUpdatedBy", fields: [updatedById], references: [id])
+}
+
+model LoyaltyWallet {
+  id                       String        @id @default(uuid())
+  isActive                 Boolean       @default(true)
+  activationDate           DateTime      @default(now())
+  cashRegisterActivationId String?
+  cashRegisterActivation   CashRegister? @relation(fields: [cashRegisterActivationId], references: [id])
+  webPlataformActivationId Boolean       @default(false)
+  shortWalletId            String        @unique
+  clientId                 String        @unique
+  client                   Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  currentBalance           Int           @default(0)
+  totalPointsEarned        Int           @default(0)
+  totalPointsUsed          Int           @default(0)
+
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  // Relaciones
+  buckets      LoyaltyPointBucket[]
+  transactions LoyaltyTransaction[]
+
+  deletedAt   DateTime?
+  createdById String?
+  createdBy   Admin?    @relation("LoyaltyWalletCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?    @relation("LoyaltyWalletUpdatedBy", fields: [updatedById], references: [id])
+}
+
+model LoyaltyPointBucket {
+  id String @id @default(uuid())
+
+  walletId String
+  wallet   LoyaltyWallet @relation(fields: [walletId], references: [id])
+
+  // Transacción que creó este bucket (Origen)
+  originTransactionId String             @unique
+  originTransaction   LoyaltyTransaction @relation("BucketOrigin", fields: [originTransactionId], references: [id])
+
+  initialAmount   Int // Ej: 100
+  remainingAmount Int // Ej: 50 (se va reduciendo conforme se usan)
+
+  expirationDate DateTime
+  status         LoyaltyBucketStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relación con los usos (Traceability)
+  usages LoyaltyBucketUsage[]
+
+  deletedAt   DateTime?
+  createdById String?
+  createdBy   Admin?    @relation("LoyaltyPointBucketCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?    @relation("LoyaltyPointBucketUpdatedBy", fields: [updatedById], references: [id])
+}
+
+enum LoyaltyBucketStatus {
+  ACTIVE
+  DEPLETED // Se acabaron los puntos de este lote
+  EXPIRED // Se venció el tiempo
+}
+
+model LoyaltyTransaction {
+  id String @id @default(uuid())
+
+  walletId String
+  wallet   LoyaltyWallet @relation(fields: [walletId], references: [id])
+
+  type   LoyaltyTransactionType
+  amount Int // +100 (ganancia) o -150 (gasto)
+
+  orderItemId String?
+  orderItem   OrderItem? @relation(fields: [orderItemId], references: [id])
+  description String?
+
+  // Trazabilidad de ajustes: vincula esta transacción con la transacción original que se está ajustando
+  relatedTransactionId String?
+  relatedTransaction   LoyaltyTransaction?  @relation("TransactionAdjustment", fields: [relatedTransactionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  adjustments          LoyaltyTransaction[] @relation("TransactionAdjustment")
+
+  // Metadata adicional para auditoría (ej: { previousPrice: 100, newPrice: 150, reason: "schedule_change" })
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  // Si fue ganancia, generó este bucket:
+  generatedBucket LoyaltyPointBucket? @relation("BucketOrigin")
+
+  // Si fue gasto, consumió de estos buckets:
+  bucketUsages LoyaltyBucketUsage[]
+
+  deletedAt   DateTime?
+  createdById String?
+  createdBy   Admin?    @relation("LoyaltyTransactionCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?    @relation("LoyaltyTransactionUpdatedBy", fields: [updatedById], references: [id])
+
+  @@index([orderItemId])
+  @@index([relatedTransactionId])
+}
+
+model LoyaltyBucketUsage {
+  id String @id @default(uuid())
+
+  transactionId String
+  transaction   LoyaltyTransaction @relation(fields: [transactionId], references: [id])
+
+  bucketId String
+  bucket   LoyaltyPointBucket @relation(fields: [bucketId], references: [id])
+
+  amountUsed Int // Cuántos puntos se tomaron de ESTE bucket específico
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deletedAt   DateTime?
+  createdById String?
+  createdBy   Admin?    @relation("LoyaltyBucketUsageCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?    @relation("LoyaltyBucketUsageUpdatedBy", fields: [updatedById], references: [id])
+}
+
+enum LoyaltyTransactionType {
+  EARNED // Compra normal o promo
+  REDEEMED // Uso de puntos
+  EXPIRED // Vencimiento
+  ADJUSTMENT // Corrección manual
+  REFUND_EARNED // Se canceló la compra que dio puntos (restar)
+  REFUND_REDEEMED // Se canceló la compra pagada con puntos (devolver)
+}
+
+enum LoyaltyServiceType {
+  ESTRELLA_ROJA
+  E_BUS
+}
+
+model LoyaltyDetailsByService {
+  id             String             @id @default(uuid())
+  service        LoyaltyServiceType
+  configurations String             @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deletedAt   DateTime?
+  createdById String?
+  createdBy   Admin?    @relation("LoyaltyDetailsByServiceCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?    @relation("LoyaltyDetailsByServiceUpdatedBy", fields: [updatedById], references: [id])
+}
+
+model LoyalityLegalByService {
+  id                 String             @id @default(uuid())
+  service            LoyaltyServiceType
+  termsandconditions String             @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deletedAt   DateTime?
+  createdById String?
+  createdBy   Admin?    @relation("LoyalityLegalByServiceCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?    @relation("LoyalityLegalByServiceUpdatedBy", fields: [updatedById], references: [id])
+}
+
+model LoyalityBanner {
+  id                        String                  @id @default(uuid())
+  imageUrl                  String
+  loyalityBannerByServiceId String
+  loyalityBannerByService   LoyalityBannerByService @relation(fields: [loyalityBannerByServiceId], references: [id])
+  createdAt                 DateTime                @default(now())
+  updatedAt                 DateTime                @updatedAt
+
+  deletedAt   DateTime?
+  createdById String?
+  createdBy   Admin?    @relation("LoyalityBannerCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?    @relation("LoyalityBannerUpdatedBy", fields: [updatedById], references: [id])
+}
+
+model LoyalityBannerByService {
+  id             String             @id @default(uuid())
+  service        LoyaltyServiceType
+  loyalityBanner LoyalityBanner[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deletedAt   DateTime?
+  createdById String?
+  createdBy   Admin?    @relation("LoyalityBannerByServiceCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?    @relation("LoyalityBannerByServiceUpdatedBy", fields: [updatedById], references: [id])
+}
+
+enum FikFocSchemeType {
+  FIK
+  FOC
+}
+
+model FikFocScheme {
+  id        String           @id @default(uuid())
+  type      FikFocSchemeType
+  costByKm  Decimal          @db.Decimal(10, 4)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  deletedAt   DateTime?
+  createdById String?
+  createdBy   Admin?    @relation("FikFocSchemeCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?    @relation("FikFocSchemeUpdatedBy", fields: [updatedById], references: [id])
+
+  ranges       FikFocRange[]
+  routes       Route[]
+  schemeRoutes FikFocSchemeRoute[]
+
+  @@index([deletedAt])
+}
+
+model FikFocRange {
+  id               String   @id @default(uuid())
+  rangeMin         Decimal  @db.Decimal(10, 4)
+  rangeMax         Decimal  @db.Decimal(10, 4)
+  applicableFactor Decimal  @db.Decimal(10, 4)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  deletedAt DateTime?
+
+  schemeId String
+  scheme   FikFocScheme @relation(fields: [schemeId], references: [id])
+
+  createdById String?
+  createdBy   Admin?  @relation("FikFocRangeCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?  @relation("FikFocRangeUpdatedBy", fields: [updatedById], references: [id])
+
+  schemeRoutes FikFocSchemeRoute[]
+
+  @@index([schemeId])
+  @@index([deletedAt])
+}
+
+model FikFocSchemeRoute {
+  id String @id @default(uuid())
+
+  // Snapshot at assignment time
+  routeNumber          String
+  description          String // "Origin → Destination"
+  commercialDistanceKm Decimal @db.Decimal(10, 4)
+  ratePerKm            Decimal @db.Decimal(10, 4) // reference field (PM requirement)
+
+  // Computed values
+  fareAmount         Decimal @db.Decimal(10, 4) // commercialDistanceKm × ratePerKm
+  adjustedFareAmount Decimal @db.Decimal(10, 4) // commercialDistanceKm × applicableFactor
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  schemeId String
+  scheme   FikFocScheme @relation(fields: [schemeId], references: [id])
+
+  routeId String
+  route   Route  @relation(fields: [routeId], references: [id])
+
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id])
+
+  fikFocRangeId String
+  fikFocRange   FikFocRange @relation(fields: [fikFocRangeId], references: [id])
+
+  createdById String?
+  createdBy   Admin?  @relation("FikFocSchemeRouteCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?  @relation("FikFocSchemeRouteUpdatedBy", fields: [updatedById], references: [id])
+
+  @@unique([schemeId, routeId])
+  @@index([schemeId])
+  @@index([deletedAt])
+}
+
+// ─── Portal de Agencias ───────────────────────────────────────────────────────
+
+enum AgencyStatus {
+  ACTIVE
+  INACTIVE
+  DELETED
+}
+
+model Agency {
+  id              String       @id @default(uuid())
+  name            String       @db.VarChar(100)
+  status          AgencyStatus @default(ACTIVE)
+  creditLimit     Decimal      @default(0) @db.Decimal(10, 2)
+  currentDebt     Decimal      @default(0) @db.Decimal(10, 2)
+  discountPercent Decimal      @default(0) @db.Decimal(5, 2)
+  passwordHash    String
+  isTempPassword  Boolean      @default(true)
+  deletedAt       DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  createdById String?
+  createdBy   Admin?  @relation("AgencyCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?  @relation("AgencyUpdatedBy", fields: [updatedById], references: [id])
+
+  rfcs     AgencyRfc[]
+  sessions AgencySession[]
+  payments AgencyPayment[]
+  charges  AgencyCharge[]
+  cortes   AgencyCorte[]
+
+  @@index([companyId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model AgencyRfc {
+  id           String   @id @default(uuid())
+  rfc          String   @unique @db.VarChar(13)
+  businessName String
+  email        String   @unique
+  phone        String   @db.VarChar(10)
+  address      String
+  isPrimary    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  agencyId String
+  agency   Agency             @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  services AgencyRfcService[]
+
+  @@index([agencyId])
+}
+
+model AgencyRfcService {
+  agencyRfcId String
+  agencyRfc   AgencyRfc @relation(fields: [agencyRfcId], references: [id], onDelete: Cascade)
+  serviceId   String
+  service     Service   @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@id([agencyRfcId, serviceId])
+}
+
+model AgencySession {
+  id           String   @id @default(uuid())
+  accessToken  String   @unique
+  refreshToken String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  agencyId String
+  agency   Agency @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  @@index([agencyId])
+}
+
+model AgencyPayment {
+  id        String   @id @default(uuid())
+  amount    Decimal  @db.Decimal(10, 2)
+  reference String?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  agencyId String
+  agency   Agency @relation(fields: [agencyId], references: [id])
+
+  registeredById String?
+  registeredBy   Admin?  @relation("AgencyPaymentRegisteredBy", fields: [registeredById], references: [id])
+
+  @@index([agencyId])
+}
+
+model AgencyCharge {
+  id        String   @id @default(uuid())
+  amount    Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  agencyId String
+  agency   Agency @relation(fields: [agencyId], references: [id])
+
+  orderItemId String    @unique
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id])
+
+  registeredById String?
+  registeredBy   Admin?  @relation("AgencyChargeRegisteredBy", fields: [registeredById], references: [id])
+
+  updatedById String?
+  updatedBy   Admin?  @relation("AgencyChargeUpdatedBy", fields: [updatedById], references: [id])
+
+  corteId String?
+  corte   AgencyCorte? @relation(fields: [corteId], references: [id])
+
+  @@index([agencyId, createdAt])
+  @@index([corteId])
+}
+
+model AgencyCorte {
+  id             String   @id @default(uuid())
+  from           DateTime
+  to             DateTime
+  totalTickets   Int      @default(0)
+  grossAmount    Decimal  @default(0) @db.Decimal(12, 2)
+  discountAmount Decimal  @default(0) @db.Decimal(12, 2)
+  netAmount      Decimal  @default(0) @db.Decimal(12, 2)
+  pdfUrl         String?
+  createdAt      DateTime @default(now())
+
+  agencyId String
+  agency   Agency @relation(fields: [agencyId], references: [id])
+
+  createdById String?
+  createdBy   Admin?  @relation("AgencyCorteCreatedBy", fields: [createdById], references: [id])
+
+  charges AgencyCharge[]
+
+  @@index([agencyId, from, to])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  entityType String
+  entityId   String
+  action     String
+  snapshot   Json?
+  createdAt  DateTime @default(now())
+
+  performedById String?
+  performedBy   Admin?  @relation("AuditLogPerformedBy", fields: [performedById], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([performedById])
+}
+
+model TomTomGroup {
+  id            String  @id @default(uuid())
+  tomTomGroupId Int     @unique // nGrupo en InRoute
+  name          String?
+
+  buses     Bus[]
+  operators Operator[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TravelCardTomTomSync {
+  id           String     @id @default(uuid())
+  travelCardId String
+  travelCard   TravelCard @relation(fields: [travelCardId], references: [id])
+
+  operation    TomTomSyncOperation
+  status       TomTomSyncStatus
+  tomTomTripId Int? // nViaje generado (solo en CREATE exitoso)
+  errorMessage String?
+
+  attemptedAt DateTime @default(now())
+
+  @@index([travelCardId])
+}
+
+// Operational data of a finished trip in InRoute.
+// Populated by BIGER when nStatusViaje = 6 (Terminated).
+// Stored in BCB to decouple collection and variable bonus processes
+// from InRoute availability.
+model TomTomTripData {
+  id           String     @id @default(uuid())
+  travelCardId String     @unique
+  travelCard   TravelCard @relation(fields: [travelCardId], references: [id])
+
+  // Trip status in InRoute at the time of sync
+  tripStatus Int // nStatusViaje (1-7)
+
+  // Planned vs real times
+  departurePlanned DateTime? // cFechaSalidaPlaneada + cHoraSalidaPlaneada
+  departureReal    DateTime? // cFechaSalidaReal + cHoraSalidaReal
+  arrivalReal      DateTime? // cFechaLlegadaReal + cHoraLlegadaReal
+
+  // Operational telemetry
+  distanceKm        Float? // nDistanciaRecorrida (km)
+  fuelLiters        Float? // nConsumoGasolina (litros)
+  fuelEfficiencyKmL Float? // nRendimientoGasolina (km/litro)
+  avgSpeedKmh       Float? // nVelocidadPromedio (km/h)
+  maxSpeedKmh       Float? // nVelocidadMaxima (km/h)
+  durationMinutes   Int? // nTiempoDuracion (minutos)
+  stoppedMinutes    Int? // nTiempoParado (minutos)
+
+  syncedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum TomTomSyncOperation {
+  CREATE
+  UPDATE
+  CANCEL
+}
+
+enum TomTomSyncStatus {
+  SUCCESS
+  FAILED
+}
+
+//Recollecion tecket collector offline
+
+enum SyncOfflineRequestStatus {
+  PROCESSING
+  DONE
+  FAILED
+}
+
+model OrderItemOffline {
+  id                 String   @id @default(uuid())
+  tabletTicketNumber String
+  createdAt          DateTime @default(now())
+
+  orderItemId String    @unique
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  tripId String?
+  trip   Trip?   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tabletTicketNumber])
+}
+
+model SyncOfflineRequest {
+  id               String                   @id
+  syncId           String                   @unique
+  advisorId        String?
+  status           SyncOfflineRequestStatus @default(PROCESSING)
+  payloadHash      String                   @db.Char(64)
+  responseSnapshot Json?
+  attempts         Int                      @default(1)
+  errorMessage     String?
+  receivedAt       DateTime                 @default(now())
+  processedAt      DateTime?
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime
+
+  AdvisorUser             AdvisorUser?              @relation(fields: [advisorId], references: [id])
+  SyncOfflineRequestOrder SyncOfflineRequestOrder[]
+
+  @@index([advisorId])
+  @@index([status])
+  @@index([receivedAt])
+}
+
+model SyncOfflineRequestOrder {
+  id                  String   @id
+  syncRequestId       String
+  orderId             String
+  isCanceledInPayload Boolean  @default(false)
+  createdAt           DateTime @default(now())
+
+  SyncOfflineRequest SyncOfflineRequest @relation(fields: [syncRequestId], references: [id], onDelete: Cascade)
+  Order              Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([syncRequestId, orderId])
+  @@index([orderId])
+}
+
+//Folios de facturación
+
+model InvoiceCode {
+  code            String        @id
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  isUsed          Boolean       @default(false)
+  usedAt          DateTime?
+  requestedFrom   SalesChannel? @relation(fields: [requestedFromId], references: [id])
+  requestedFromId String?
+
+  @@index([isUsed])
+}
+
+//--- recargas telefonicas --------------------------
+model MobileOperator {
+  id          String      @id @default(uuid())
+  name        String      @db.VarChar(50)
+  code        String      @unique @db.VarChar(20)
+  isActive    Boolean     @default(true)
+  createdById String?
+  createdBy   Admin?      @relation("MobileOperatorCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?      @relation("MobileOperatorUpdatedBy", fields: [updatedById], references: [id])
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  mobileSkus  MobileSku[]
+}
+
+model MobileSku {
+  id                 String              @id @default(uuid())
+  code               String              @db.VarChar(50)
+  name               String              @db.VarChar(100)
+  amount             Decimal             @db.Decimal(10, 2)
+  detail             String?             @db.VarChar(255)
+  isActive           Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  createdById        String?
+  createdBy          Admin?              @relation("MobileSkuCreatedBy", fields: [createdById], references: [id])
+  updatedById        String?
+  updatedBy          Admin?              @relation("MobileSkuUpdatedBy", fields: [updatedById], references: [id])
+  mobileOperatorId   String
+  mobileOperator     MobileOperator      @relation(fields: [mobileOperatorId], references: [id])
+  mobilerecharges    Mobilerecharge[]
+  miscellaneousSales MiscellaneousSale[] @relation("MiscellaneousSaleMobileSku")
+}
+
+model Mobilerecharge {
+  id String @id @default(uuid())
+
+  mobileSkuId           String            @db.VarChar(50)
+  mobileSku             MobileSku         @relation(fields: [mobileSkuId], references: [id])
+  phone                 String            @db.Char(10)
+  providerTransactionId String
+  miscelaneousSaleId    String
+  miscelaneousSale      MiscellaneousSale @relation(fields: [miscelaneousSaleId], references: [id])
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  createdById String?
+  createdBy   AdvisorUser? @relation("MobilerechargeCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   AdvisorUser? @relation("MobilerechargeUpdatedBy", fields: [updatedById], references: [id])
+}
+
+// ─── Portal de Nómina ─────────────────────────────────────────────────────────
+
+enum PayrollBonusStatus {
+  PENDING
+  PROCESSED
+}
+
+enum ManualBonusType {
+  PRODUCTIVITY
+  FUEL
+  QUALITY
+  TRAVEL_EXPENSES
+  PRIZE
+  DISCOUNT
+  OTHER
+}
+
+enum SpecialServiceType {
+  TOURISM
+  FREIGHT
+  OTHER
+}
+
+model ManualBonus {
+  id          String             @id @default(uuid())
+  operatorId  String
+  bonusType   ManualBonusType
+  amount      Decimal            @db.Decimal(12, 2)
+  periodStart DateTime           @db.Date
+  periodEnd   DateTime           @db.Date
+  comments    String?            @db.VarChar(255)
+  status      PayrollBonusStatus @default(PENDING)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  deletedAt   DateTime?
+  createdById String?
+  updatedById String?
+
+  operator  Operator @relation(fields: [operatorId], references: [id])
+  createdBy Admin?   @relation("ManualBonusCreatedBy", fields: [createdById], references: [id])
+  updatedBy Admin?   @relation("ManualBonusUpdatedBy", fields: [updatedById], references: [id])
+
+  @@index([operatorId])
+  @@index([status])
+  @@index([periodStart, periodEnd])
+  @@index([deletedAt])
+}
+
+model SpecialService {
+  id          String             @id @default(uuid())
+  operatorId  String
+  serviceDate DateTime           @db.Date
+  serviceType SpecialServiceType
+  workedDays  Decimal            @db.Decimal(6, 2)
+  fixedAmount Decimal?           @db.Decimal(12, 2)
+  status      PayrollBonusStatus @default(PENDING)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  deletedAt   DateTime?
+  createdById String?
+  updatedById String?
+
+  operator  Operator @relation(fields: [operatorId], references: [id])
+  createdBy Admin?   @relation("SpecialServiceCreatedBy", fields: [createdById], references: [id])
+  updatedBy Admin?   @relation("SpecialServiceUpdatedBy", fields: [updatedById], references: [id])
+
+  @@index([operatorId])
+  @@index([serviceDate])
+  @@index([deletedAt])
+}
+
+model NonWorkingDay {
+  id            String    @id @default(uuid())
+  date          DateTime  @db.Date
+  description   String    @db.VarChar(100)
+  paymentFactor Decimal   @db.Decimal(6, 4)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+  createdById   String?
+  updatedById   String?
+
+  createdBy Admin? @relation("NonWorkingDayCreatedBy", fields: [createdById], references: [id])
+  updatedBy Admin? @relation("NonWorkingDayUpdatedBy", fields: [updatedById], references: [id])
+
+  @@unique([date], map: "NonWorkingDay_date_active_key", where: { deletedAt: null })
+  @@index([date])
+  @@index([deletedAt])
+}
+
+// ── Business Rules ─────────────────────────────────────
+
+enum BusinessRuleAction {
+  CANCEL
+  CHANGE
+  EXCHANGE
+}
+
+enum RuleKind {
+  TIMING
+  PENALTY
+  ELIGIBILITY
+}
+
+enum PenaltyCalcType {
+  PERCENT_OF_TOTAL
+  FIXED_AMOUNT
+}
+
+enum SurchargeType {
+  NORMAL
+  PENALTY
+}
+
+model BusinessRule {
+  id String @id @default(uuid())
+
+  actionType  BusinessRuleAction
+  kind        RuleKind
+  name        String
+  description String?
+
+  allServices        Boolean         @default(false)
+  serviceIds         String[]        @default([])
+  excludedServiceIds String[]        @default([])
+  routeIds           String[]        @default([])
+  paymentMethods     PaymentMethod[] @default([])
+  salesChannelIds    String[]        @default([])
+  orderTypes         OrderType[]     @default([])
+
+  minutesBeforeDeparture Int?
+  minutesAfterDeparture  Int?
+
+  penaltyCalcType               PenaltyCalcType?
+  penaltyValue                  Decimal?         @db.Decimal(10, 2)
+  penaltyTaxApplies             Boolean?
+  triggerMinutesAfterDeparture  Int?
+  triggerMinutesBeforeDeparture Int?
+
+  maxDaysSincePurchase    Int?
+  maxHoursSincePurchase   Int?
+  minHoursBeforeDeparture Int?
+
+  priority   Int       @default(100)
+  enabled    Boolean   @default(true)
+  validFrom  DateTime?
+  validUntil DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+
+  @@index([actionType, kind, enabled, priority])
+}
