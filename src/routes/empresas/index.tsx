@@ -1,403 +1,403 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { Check } from 'lucide-react'
-import { Clave, Sello, SelloActividad } from '~/components/base'
-import { Encabezado } from '~/components/cascaron'
-import { EstadoError, EstadoVacio, ManifiestoCargando } from '~/components/estados'
-import { BarraDeFiltros, Buscador, FiltroLista } from '~/components/filtros'
-import type { Opcion } from '~/components/filtros'
-import { Vinculo } from '~/components/ficha'
-import { BotonActualizar } from '~/components/actualizar'
+import { KeyText, Stamp, ActivityStamp } from '~/components/base'
+import { PageHeader } from '~/components/shell'
+import { ErrorState, EmptyState, ManifestSkeleton } from '~/components/states'
+import { FilterBar, SearchBox, ListFilter } from '~/components/filters'
+import type { Option } from '~/components/filters'
+import { TextLink } from '~/components/card'
+import { RefreshButton } from '~/components/refresh'
 import {
-  Cabecera,
-  Cuerpo,
-  EnlaceDeFila,
-  Fila,
-  Manifiesto,
-  Paginacion,
+  TableHead,
+  TableBody,
+  RowLink,
+  TableRow,
+  Manifest,
+  Pagination,
   Td,
   Th,
-  ThOrden,
-} from '~/components/tabla'
+  SortableTh,
+} from '~/components/table'
 import { cn } from '~/lib/cn'
-import { SIN_DATO, entero, plural } from '~/lib/formato'
+import { NO_DATA, integer, plural } from '~/lib/format'
 import {
-  DIRECCIONES,
-  booleano,
-  entero as enteroParam,
-  limpiarBusqueda,
-  lista,
-  tamanoDePagina,
-  texto,
-  unoDe,
-} from '~/lib/parametros'
+  DIRECTIONS,
+  bool,
+  integerParam,
+  stripDefaults,
+  list,
+  pageSize,
+  text,
+  oneOf,
+} from '~/lib/params'
 import {
-  ESTATUS_EMPRESA,
-  ORDENES_EMPRESA,
-  ORIGEN_EMPRESA,
-  listarEmpresas,
-} from '~/server/empresas'
+  COMPANY_STATUSES,
+  COMPANY_SORTS,
+  COMPANY_SOURCES,
+  listCompanies,
+} from '~/server/companies'
 import type {
-  EstatusEmpresa,
-  FiltroEmpresas,
-  OrigenEmpresa,
-} from '~/server/empresas'
+  CompanyStatus,
+  CompanySearch,
+  CompanySource,
+} from '~/server/companies'
 
 /* ───────────────────────────────────────────────────────────────────────────
-   El manifiesto de empresas. Todo el estado de la vista —búsqueda, filtros,
-   orden y hoja— vive en la dirección, de modo que la pantalla exacta se pega
-   en un chat y el otro ve lo mismo.
+   The companies manifest. All of the view state —search, filters, sort and
+   page— lives in the URL, so the exact screen can be pasted into a chat and
+   the other person sees the same thing.
    ─────────────────────────────────────────────────────────────────────────── */
 
-type Busqueda = FiltroEmpresas
+type Search = CompanySearch
 
-const POR_OMISION: Busqueda = {
+const URL_DEFAULTS: Search = {
   q: '',
-  pagina: 1,
-  porPagina: 25,
-  orden: 'clave',
+  page: 1,
+  perPage: 25,
+  sort: 'key',
   dir: 'asc',
-  estatus: [],
-  origen: [],
-  bajas: false,
+  status: [],
+  source: [],
+  deleted: false,
 }
 
-/** Filtra una lista de la URL dejando sólo los valores que el catálogo admite. */
-function listaDe<const T extends ReadonlyArray<string>>(
-  valor: unknown,
-  validas: T,
+/** Filters a list from the URL down to only the values the catalog accepts. */
+function listOf<const T extends ReadonlyArray<string>>(
+  value: unknown,
+  valid: T,
 ): Array<T[number]> {
-  return lista(valor).filter((v): v is T[number] =>
-    (validas as ReadonlyArray<string>).includes(v),
+  return list(value).filter((v): v is T[number] =>
+    (valid as ReadonlyArray<string>).includes(v),
   )
 }
 
-const OPCIONES_ESTATUS: Array<Opcion> = [
-  { valor: 'activa', etiqueta: 'Activa' },
-  { valor: 'inactiva', etiqueta: 'Inactiva' },
+const STATUS_OPTIONS: Array<Option> = [
+  { value: 'active', label: 'Activa' },
+  { value: 'inactive', label: 'Inactiva' },
 ]
 
-const OPCIONES_ORIGEN: Array<Opcion> = [
-  { valor: 'hcm', etiqueta: 'Sincronizada por HCM' },
-  { valor: 'manual', etiqueta: 'Creada a mano' },
+const SOURCE_OPTIONS: Array<Option> = [
+  { value: 'hcm', label: 'Sincronizada por HCM' },
+  { value: 'manual', label: 'Creada a mano' },
 ]
 
-/** Repone los valores por omisión que no viajan en la URL. */
-function completar(s: Partial<Busqueda>): Busqueda {
-  return { ...POR_OMISION, ...s }
+/** Restores the default values that do not travel in the URL. */
+function withDefaults(s: Partial<Search>): Search {
+  return { ...URL_DEFAULTS, ...s }
 }
 
 export const Route = createFileRoute('/empresas/')({
-  // Sólo viaja en la URL lo que el usuario cambió: si `validateSearch` devolviera
-  // el objeto completo, entrar a /empresas dejaría la barra con
-  // `?q=&pagina=1&porPagina=25&…` encima. `completar` repone los valores por
-  // omisión para el loader y para la vista, que siempre los reciben completos.
-  validateSearch: (entrada: Record<string, unknown>): Partial<Busqueda> =>
-    limpiarBusqueda(
+  // Only what the user changed travels in the URL: if `validateSearch` returned
+  // the whole object, entering /empresas would leave the address bar with
+  // `?q=&page=1&perPage=25&…` on top. `withDefaults` restores the default
+  // values for the loader and for the view, which always get them complete.
+  validateSearch: (input: Record<string, unknown>): Partial<Search> =>
+    stripDefaults(
       {
-        q: texto(entrada.q),
-        pagina: enteroParam(entrada.pagina, 1, 1),
-        porPagina: tamanoDePagina(entrada.porPagina),
-        orden: unoDe(entrada.orden, ORDENES_EMPRESA, 'clave'),
-        dir: unoDe(entrada.dir, DIRECCIONES, 'asc'),
-        estatus: listaDe(entrada.estatus, ESTATUS_EMPRESA),
-        origen: listaDe(entrada.origen, ORIGEN_EMPRESA),
-        bajas: booleano(entrada.bajas),
+        q: text(input.q),
+        page: integerParam(input.page, 1, 1),
+        perPage: pageSize(input.perPage),
+        sort: oneOf(input.sort, COMPANY_SORTS, 'key'),
+        dir: oneOf(input.dir, DIRECTIONS, 'asc'),
+        status: listOf(input.status, COMPANY_STATUSES),
+        source: listOf(input.source, COMPANY_SOURCES),
+        deleted: bool(input.deleted),
       },
-      POR_OMISION,
+      URL_DEFAULTS,
     ),
-  loaderDeps: ({ search }) => completar(search),
-  loader: ({ deps }) => listarEmpresas({ data: deps }),
-  component: Pantalla,
-  pendingComponent: () => <ManifiestoCargando columnas={[9, 14, 22, 28, 8, 10]} />,
+  loaderDeps: ({ search }) => withDefaults(search),
+  loader: ({ deps }) => listCompanies({ data: deps }),
+  component: Screen,
+  pendingComponent: () => <ManifestSkeleton columns={[9, 14, 22, 28, 8, 10]} />,
   errorComponent: ({ error, reset }) => (
-    <EstadoError
-      titulo="No fue posible leer el catálogo de empresas"
-      detalle={error instanceof Error ? error.message : String(error)}
-      alReintentar={reset}
+    <ErrorState
+      title="No fue posible leer el catálogo de empresas"
+      detail={error instanceof Error ? error.message : String(error)}
+      onRetry={reset}
     />
   ),
 })
 
-/* ── Casilla ──────────────────────────────────────────────────────────────
-   "Incluir bajas" no es una lista de opciones sino un sí/no, y un popover
-   para una sola casilla sería una puerta de más. Se compone con los mismos
-   tokens del disparador de FiltroLista para que la barra lea pareja.        */
-function Casilla({
-  marcada,
-  alCambiar,
+/* ── Checkbox ─────────────────────────────────────────────────────────────
+   "Incluir bajas" is not a list of options but a yes/no, and a popover for
+   a single checkbox would be one door too many. It is built from the same
+   tokens as the ListFilter trigger so the bar reads even.                   */
+function Checkbox({
+  checked,
+  onChange,
   children,
-  titulo,
+  title,
 }: {
-  marcada: boolean
-  alCambiar: (marcada: boolean) => void
+  checked: boolean
+  onChange: (checked: boolean) => void
   children: React.ReactNode
-  titulo?: string
+  title?: string
 }) {
   return (
     <button
       type="button"
       role="checkbox"
-      aria-checked={marcada}
-      title={titulo}
-      onClick={() => alCambiar(!marcada)}
+      aria-checked={checked}
+      title={title}
+      onClick={() => onChange(!checked)}
       className={cn(
-        'inline-flex h-9 items-center gap-2 rounded-chip border px-3 text-lectura',
+        'inline-flex h-9 items-center gap-2 rounded-chip border px-3 text-body',
         'transition-[colors,transform] duration-100 active:scale-[0.98]',
-        marcada
-          ? 'border-sello/40 bg-sello-lavado text-tinta'
-          : 'border-raya border-dashed bg-transparent text-tinta-2 hover:border-raya-firme hover:border-solid hover:bg-renglon',
+        checked
+          ? 'border-stamp/40 bg-stamp-wash text-ink'
+          : 'border-rule border-dashed bg-transparent text-ink-2 hover:border-rule-strong hover:border-solid hover:bg-row',
       )}
     >
       <span
         aria-hidden
         className={cn(
           'grid size-[15px] shrink-0 place-items-center rounded-[2px] border transition-colors duration-100',
-          marcada ? 'border-sello bg-sello text-hoja' : 'border-raya-firme',
+          checked ? 'border-stamp bg-stamp text-sheet' : 'border-rule-strong',
         )}
       >
-        {marcada ? <Check size={10} strokeWidth={3} /> : null}
+        {checked ? <Check size={10} strokeWidth={3} /> : null}
       </span>
       {children}
     </button>
   )
 }
 
-function Pantalla() {
-  const resultado = Route.useLoaderData()
-  const busqueda = completar(Route.useSearch())
+function Screen() {
+  const result = Route.useLoaderData()
+  const search = withDefaults(Route.useSearch())
   const navigate = Route.useNavigate()
 
-  function actualizar(cambios: Partial<Busqueda>) {
+  function updateSearch(patch: Partial<Search>) {
     navigate({
-      search: (previo) =>
-        limpiarBusqueda({ ...completar(previo), ...cambios }, POR_OMISION),
+      search: (prev) =>
+        stripDefaults({ ...withDefaults(prev), ...patch }, URL_DEFAULTS),
       replace: true,
     })
   }
 
-  function ordenar(campo: string) {
-    actualizar({
-      orden: campo as Busqueda['orden'],
-      dir: busqueda.orden === campo && busqueda.dir === 'asc' ? 'desc' : 'asc',
-      pagina: 1,
+  function sortBy(field: string) {
+    updateSearch({
+      sort: field as Search['sort'],
+      dir: search.sort === field && search.dir === 'asc' ? 'desc' : 'asc',
+      page: 1,
     })
   }
 
-  const hayFiltros =
-    busqueda.q.trim().length > 0 ||
-    busqueda.estatus.length > 0 ||
-    busqueda.origen.length > 0 ||
-    busqueda.bajas
+  const hasFilters =
+    search.q.trim().length > 0 ||
+    search.status.length > 0 ||
+    search.source.length > 0 ||
+    search.deleted
 
-  if (!resultado.ok) {
+  if (!result.ok) {
     return (
       <>
-        <Encabezado titulo="Empresas" renglon={SIN_DATO} />
-        <EstadoError {...resultado.falla} />
+        <PageHeader title="Empresas" subtitle={NO_DATA} />
+        <ErrorState {...result.failure} />
       </>
     )
   }
 
-  const { filas, total, pagina } = resultado
+  const { rows, total, page } = result
 
   return (
     <>
-      <Encabezado
-        acciones={<BotonActualizar />}
-        titulo="Empresas"
-        renglon={
-          hayFiltros
+      <PageHeader
+        actions={<RefreshButton />}
+        title="Empresas"
+        subtitle={
+          hasFilters
             ? `${plural(total, 'empresa', 'empresas')} con los filtros aplicados`
             : plural(total, 'empresa migrada', 'empresas migradas')
         }
       />
 
       <div className="px-4 sm:px-8 py-6">
-        <div className="overflow-hidden rounded-hoja border border-raya bg-hoja">
-          <BarraDeFiltros
-            hayFiltros={hayFiltros}
-            alLimpiar={() =>
-              actualizar({ q: '', estatus: [], origen: [], bajas: false, pagina: 1 })
+        <div className="overflow-hidden rounded-sheet border border-rule bg-sheet">
+          <FilterBar
+            hasFilters={hasFilters}
+            onClear={() =>
+              updateSearch({ q: '', status: [], source: [], deleted: false, page: 1 })
             }
           >
-            <Buscador
+            <SearchBox
               className="w-64"
-              valor={busqueda.q}
-              marcador="Buscar clave, nombre o razón social"
-              alCambiar={(q) => actualizar({ q, pagina: 1 })}
+              value={search.q}
+              placeholder="Buscar clave, nombre o razón social"
+              onChange={(q) => updateSearch({ q, page: 1 })}
             />
-            <FiltroLista
-              nombre="Estatus"
-              opciones={OPCIONES_ESTATUS}
-              seleccion={busqueda.estatus}
-              alCambiar={(seleccion) =>
-                actualizar({
-                  estatus: seleccion as Array<EstatusEmpresa>,
-                  pagina: 1,
+            <ListFilter
+              label="Estatus"
+              options={STATUS_OPTIONS}
+              selection={search.status}
+              onChange={(selection) =>
+                updateSearch({
+                  status: selection as Array<CompanyStatus>,
+                  page: 1,
                 })
               }
             />
-            <FiltroLista
-              nombre="Origen"
-              opciones={OPCIONES_ORIGEN}
-              seleccion={busqueda.origen}
-              alCambiar={(seleccion) =>
-                actualizar({ origen: seleccion as Array<OrigenEmpresa>, pagina: 1 })
+            <ListFilter
+              label="Origen"
+              options={SOURCE_OPTIONS}
+              selection={search.source}
+              onChange={(selection) =>
+                updateSearch({ source: selection as Array<CompanySource>, page: 1 })
               }
             />
-            <Casilla
-              marcada={busqueda.bajas}
-              titulo="Muestra también las empresas con borrado lógico (deletedAt)"
-              alCambiar={(bajas) => actualizar({ bajas, pagina: 1 })}
+            <Checkbox
+              checked={search.deleted}
+              title="Muestra también las empresas con borrado lógico (deletedAt)"
+              onChange={(deleted) => updateSearch({ deleted, page: 1 })}
             >
               Incluir bajas
-            </Casilla>
-          </BarraDeFiltros>
+            </Checkbox>
+          </FilterBar>
 
-          {filas.length === 0 ? (
-            hayFiltros ? (
-              <EstadoVacio
-                titulo="Ninguna empresa coincide"
-                detalle="Ajusta la búsqueda o retira los filtros para ver el catálogo completo."
-                accion={
+          {rows.length === 0 ? (
+            hasFilters ? (
+              <EmptyState
+                title="Ninguna empresa coincide"
+                detail="Ajusta la búsqueda o retira los filtros para ver el catálogo completo."
+                action={
                   <button
                     type="button"
                     onClick={() =>
-                      actualizar({
+                      updateSearch({
                         q: '',
-                        estatus: [],
-                        origen: [],
-                        bajas: false,
-                        pagina: 1,
+                        status: [],
+                        source: [],
+                        deleted: false,
+                        page: 1,
                       })
                     }
-                    className="inline-flex h-8 items-center rounded-chip border border-raya px-3 font-mono text-nota font-medium tracking-[0.08em] text-tinta-2 uppercase transition-[colors,transform] duration-100 hover:border-raya-firme hover:bg-renglon hover:text-tinta active:scale-[0.97]"
+                    className="inline-flex h-8 items-center rounded-chip border border-rule px-3 font-mono text-note font-medium tracking-[0.08em] text-ink-2 uppercase transition-[colors,transform] duration-100 hover:border-rule-strong hover:bg-row hover:text-ink active:scale-[0.97]"
                   >
                     Limpiar filtros
                   </button>
                 }
               />
             ) : (
-              <EstadoVacio
-                titulo="El catálogo de empresas está vacío"
-                detalle="La base conectada no tiene ninguna empresa migrada. Confirma que DATABASE_URL apunta a la base correcta."
+              <EmptyState
+                title="El catálogo de empresas está vacío"
+                detail="La base conectada no tiene ninguna empresa migrada. Confirma que DATABASE_URL apunta a la base correcta."
               />
             )
           ) : (
-            <Manifiesto etiqueta="Empresas migradas">
-              <Cabecera>
-                <ThOrden
-                  campo="clave"
-                  ordenActual={busqueda.orden}
-                  direccion={busqueda.dir}
-                  alOrdenar={ordenar}
+            <Manifest label="Empresas migradas">
+              <TableHead>
+                <SortableTh
+                  field="key"
+                  currentSort={search.sort}
+                  direction={search.dir}
+                  onSort={sortBy}
                 >
                   Clave
-                </ThOrden>
-                <ThOrden
-                  campo="nombreCorto"
-                  ordenActual={busqueda.orden}
-                  direccion={busqueda.dir}
-                  alOrdenar={ordenar}
+                </SortableTh>
+                <SortableTh
+                  field="shortName"
+                  currentSort={search.sort}
+                  direction={search.dir}
+                  onSort={sortBy}
                 >
                   Nombre corto
-                </ThOrden>
-                <ThOrden
-                  campo="nombreComercial"
-                  ordenActual={busqueda.orden}
-                  direccion={busqueda.dir}
-                  alOrdenar={ordenar}
+                </SortableTh>
+                <SortableTh
+                  field="tradeName"
+                  currentSort={search.sort}
+                  direction={search.dir}
+                  onSort={sortBy}
                 >
                   Nombre comercial
-                </ThOrden>
+                </SortableTh>
                 <Th>Razón social</Th>
-                <ThOrden
-                  campo="servicios"
-                  numerica
-                  ordenActual={busqueda.orden}
-                  direccion={busqueda.dir}
-                  alOrdenar={ordenar}
+                <SortableTh
+                  field="services"
+                  numeric
+                  currentSort={search.sort}
+                  direction={search.dir}
+                  onSort={sortBy}
                 >
                   Servicios
-                </ThOrden>
+                </SortableTh>
                 <Th>Estatus</Th>
-              </Cabecera>
+              </TableHead>
 
-              <Cuerpo>
-                {filas.map((fila) => (
-                  <Fila key={fila.id} atenuada={fila.eliminada}>
+              <TableBody>
+                {rows.map((row) => (
+                  <TableRow key={row.id} dimmed={row.isDeleted}>
                     <Td>
-                      <EnlaceDeFila
+                      <RowLink
                         to="/empresas/$id"
-                        params={{ id: fila.id }}
+                        params={{ id: row.id }}
                         className="inline-block"
                       >
-                        <Clave enfasis>{fila.clave}</Clave>
-                      </EnlaceDeFila>
+                        <KeyText emphasis>{row.key}</KeyText>
+                      </RowLink>
                     </Td>
-                    <Td className="text-tinta-2">{fila.nombreCorto || SIN_DATO}</Td>
-                    <Td className="text-tinta">
-                      {/* El recorte va en un span: con `table-layout: auto`
-                          un max-width sobre la celda es sólo una sugerencia. */}
+                    <Td className="text-ink-2">{row.shortName || NO_DATA}</Td>
+                    <Td className="text-ink">
+                      {/* The truncation goes on a span: with `table-layout: auto`
+                          a max-width on the cell is only a suggestion. */}
                       <span className="block max-w-[20rem] truncate">
-                        {fila.nombreComercial || SIN_DATO}
+                        {row.tradeName || NO_DATA}
                       </span>
                     </Td>
-                    <Td className="text-tinta-3">
+                    <Td className="text-ink-3">
                       <span
                         className="block max-w-[22rem] truncate"
-                        title={fila.razonSocial}
+                        title={row.legalName}
                       >
-                        {fila.razonSocial || SIN_DATO}
+                        {row.legalName || NO_DATA}
                       </span>
                     </Td>
-                    <Td numerica>
-                      {fila.servicios === 0 ? (
-                        // Cero es un dato, no una ausencia: se imprime, atenuado
-                        // y sin enlace. `—` significaría "se desconoce".
-                        <span className="text-tinta-4">{entero(0)}</span>
+                    <Td numeric>
+                      {row.services === 0 ? (
+                        // Zero is a value, not an absence: it is printed, dimmed
+                        // and without a link. `—` would mean "unknown".
+                        <span className="text-ink-4">{integer(0)}</span>
                       ) : (
-                        // Por encima del enlace que cubre el renglón: el cruce
-                        // con el catálogo de servicios es el valor del visor.
-                        <Vinculo
+                        // Above the link that covers the row: crossing into the
+                        // services catalog is what the viewer is worth.
+                        <TextLink
                           to="/servicios"
-                          search={{ empresa: [fila.id] }}
-                          className="relative z-10 text-tinta"
+                          search={{ company: [row.id] }}
+                          className="relative z-10 text-ink"
                         >
-                          {entero(fila.servicios)}
-                        </Vinculo>
+                          {integer(row.services)}
+                        </TextLink>
                       )}
                     </Td>
                     <Td>
                       <span className="flex items-center gap-2">
-                        <SelloActividad
-                          activa={fila.activa}
-                          eliminada={fila.eliminada}
+                        <ActivityStamp
+                          active={row.isActive}
+                          deleted={row.isDeleted}
                         />
-                        {fila.hcmDesactivada ? (
-                          <Sello
-                            tono="aviso"
-                            titulo="HCM la reportó ausente o con estatus N. Es meramente informativo: no afecta el funcionamiento del sistema."
+                        {row.hcmDisabled ? (
+                          <Stamp
+                            tone="warning"
+                            title="HCM la reportó ausente o con estatus N. Es meramente informativo: no afecta el funcionamiento del sistema."
                           >
                             HCM
-                          </Sello>
+                          </Stamp>
                         ) : null}
                       </span>
                     </Td>
-                  </Fila>
+                  </TableRow>
                 ))}
-              </Cuerpo>
-            </Manifiesto>
+              </TableBody>
+            </Manifest>
           )}
 
-          {filas.length > 0 ? (
-            <Paginacion
-              pagina={pagina}
-              porPagina={busqueda.porPagina}
+          {rows.length > 0 ? (
+            <Pagination
+              page={page}
+              perPage={search.perPage}
               total={total}
-              sustantivo="empresas"
-              alCambiarPagina={(p) => actualizar({ pagina: p })}
-              alCambiarTamano={(t) => actualizar({ porPagina: t, pagina: 1 })}
+              noun="empresas"
+              onPageChange={(p) => updateSearch({ page: p })}
+              onPageSizeChange={(t) => updateSearch({ perPage: t, page: 1 })}
             />
           ) : null}
         </div>

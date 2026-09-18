@@ -1,125 +1,125 @@
 import type { ReactNode } from 'react'
 import { cn } from '~/lib/cn'
 
-/* ── Hoja ─────────────────────────────────────────────────────────────────
-   El contenedor del manifiesto. Sin sombra: el papel no se proyecta sobre
-   sí mismo. La separación la hace la raya y el cambio de tinte.            */
-export function Hoja({
+/* ── Sheet ────────────────────────────────────────────────────────────────
+   The manifest container. No shadow: paper does not cast onto itself.
+   The rule and the change of tint do the separating.                       */
+export function Sheet({
   className,
   children,
-  ...resto
+  ...rest
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
-        'rounded-hoja border border-raya bg-hoja',
+        'rounded-sheet border border-rule bg-sheet',
         className,
       )}
-      {...resto}
+      {...rest}
     >
       {children}
     </div>
   )
 }
 
-/* ── Sello ────────────────────────────────────────────────────────────────
-   Estado de sólo lectura. Deliberadamente NO es un interruptor: nada aquí
-   se puede cambiar, y un interruptor mentiría sobre eso.
+/* ── Stamp ────────────────────────────────────────────────────────────────
+   Read-only state. Deliberately NOT a switch: nothing here can be
+   changed, and a switch would lie about it.
 
-   Jerarquía por excepción: "Activa" es la norma y se mantiene callada;
-   lo anómalo (inactiva, dada de baja, desactivada por HCM) es lo que resalta. */
-type Tono = 'activa' | 'inactiva' | 'baja' | 'aviso'
+   Hierarchy by exception: "Activa" is the norm and stays quiet; the
+   anomalous (inactive, deleted, disabled by HCM) is what stands out.        */
+type Tone = 'active' | 'inactive' | 'deleted' | 'warning'
 
-const TONOS: Record<Tono, { punto: string; texto: string; fondo: string }> = {
-  activa: { punto: 'bg-verde', texto: 'text-tinta-2', fondo: '' },
-  inactiva: {
-    punto: 'bg-transparent ring-1 ring-inset ring-tinta-4',
-    texto: 'text-tinta-3',
-    fondo: '',
+const TONES: Record<Tone, { dot: string; text: string; background: string }> = {
+  active: { dot: 'bg-green', text: 'text-ink-2', background: '' },
+  inactive: {
+    dot: 'bg-transparent ring-1 ring-inset ring-ink-4',
+    text: 'text-ink-3',
+    background: '',
   },
-  baja: {
-    punto: 'bg-oxido',
-    texto: 'text-oxido',
-    fondo: 'bg-oxido-lavado px-1.5 -mx-1.5 rounded-chip',
+  deleted: {
+    dot: 'bg-rust',
+    text: 'text-rust',
+    background: 'bg-rust-wash px-1.5 -mx-1.5 rounded-chip',
   },
-  aviso: {
-    punto: 'bg-ambar',
-    texto: 'text-tinta-2',
-    fondo: 'bg-ambar-lavado px-1.5 -mx-1.5 rounded-chip',
+  warning: {
+    dot: 'bg-amber',
+    text: 'text-ink-2',
+    background: 'bg-amber-wash px-1.5 -mx-1.5 rounded-chip',
   },
 }
 
-export function Sello({
-  tono,
+export function Stamp({
+  tone,
   children,
-  titulo,
+  title,
   className,
 }: {
-  tono: Tono
+  tone: Tone
   children: ReactNode
-  titulo?: string
+  title?: string
   className?: string
 }) {
-  const t = TONOS[tono]
+  const t = TONES[tone]
   return (
     <span
-      title={titulo}
+      title={title}
       className={cn(
-        'inline-flex items-center gap-1.5 whitespace-nowrap py-0.5 font-mono text-nota font-medium tracking-[0.06em] uppercase',
-        t.texto,
-        t.fondo,
+        'inline-flex items-center gap-1.5 whitespace-nowrap py-0.5 font-mono text-note font-medium tracking-[0.06em] uppercase',
+        t.text,
+        t.background,
         className,
       )}
     >
-      <span className={cn('size-[5px] shrink-0 rounded-full', t.punto)} aria-hidden />
+      <span className={cn('size-[5px] shrink-0 rounded-full', t.dot)} aria-hidden />
       {children}
     </span>
   )
 }
 
-/** Atajo para el par activo/inactivo que aparece en casi todas las tablas. */
-export function SelloActividad({
-  activa,
-  eliminada,
+/** Shortcut for the active/inactive pair that shows up in almost every table. */
+export function ActivityStamp({
+  active,
+  deleted,
   className,
 }: {
-  activa: boolean
-  eliminada?: boolean
+  active: boolean
+  deleted?: boolean
   className?: string
 }) {
-  if (eliminada) {
+  if (deleted) {
     return (
-      <Sello tono="baja" titulo="Registro con deletedAt — borrado lógico" className={className}>
+      <Stamp tone="deleted" title="Registro con deletedAt — borrado lógico" className={className}>
         Baja
-      </Sello>
+      </Stamp>
     )
   }
   return (
-    <Sello tono={activa ? 'activa' : 'inactiva'} className={className}>
-      {activa ? 'Activa' : 'Inactiva'}
-    </Sello>
+    <Stamp tone={active ? 'active' : 'inactive'} className={className}>
+      {active ? 'Activa' : 'Inactiva'}
+    </Stamp>
   )
 }
 
-/* ── Clave ────────────────────────────────────────────────────────────────
-   Todo identificador del sistema —clave de empresa, número de ruta, código
-   de terminal— va en monoespaciada con seguimiento abierto. Se leen como en
-   un tablero de salidas y se distinguen al instante del texto corrido.      */
-export function Clave({
+/* ── KeyText ──────────────────────────────────────────────────────────────
+   Every identifier in the system —company key, route number, station
+   code— goes in monospace with open tracking. They read like a departures
+   board and are told apart from running text at a glance.                   */
+export function KeyText({
   children,
-  enfasis,
+  emphasis,
   className,
 }: {
   children: ReactNode
-  enfasis?: boolean
+  emphasis?: boolean
   className?: string
 }) {
   return (
     <span
-      data-cifra
+      data-numeric
       className={cn(
-        'font-mono text-dato tracking-[0.04em] whitespace-nowrap',
-        enfasis ? 'font-medium text-tinta' : 'text-tinta-2',
+        'font-mono text-data tracking-[0.04em] whitespace-nowrap',
+        emphasis ? 'font-medium text-ink' : 'text-ink-2',
         className,
       )}
     >
@@ -128,10 +128,10 @@ export function Clave({
   )
 }
 
-/* ── Rótulo ───────────────────────────────────────────────────────────────
-   Etiqueta de campo: versalitas monoespaciadas. Se demota por tamaño, peso
-   y color a la vez, para que el dato de al lado sea siempre lo que domina.  */
-export function Rotulo({
+/* ── Label ────────────────────────────────────────────────────────────────
+   Field label: monospaced small caps. Demoted by size, weight and color
+   at once, so that the datum beside it is always what dominates.            */
+export function Label({
   children,
   className,
 }: {
@@ -141,7 +141,7 @@ export function Rotulo({
   return (
     <span
       className={cn(
-        'block font-mono text-nota font-medium tracking-[0.09em] text-tinta-3 uppercase',
+        'block font-mono text-note font-medium tracking-[0.09em] text-ink-3 uppercase',
         className,
       )}
     >
@@ -150,29 +150,29 @@ export function Rotulo({
   )
 }
 
-/* ── Dato ─────────────────────────────────────────────────────────────────
-   Par rótulo/valor de las fichas de detalle.                                */
-export function Dato({
-  rotulo,
+/* ── Field ────────────────────────────────────────────────────────────────
+   Label/value pair of the detail cards.                                     */
+export function Field({
+  label,
   children,
   mono,
-  ancho,
+  wide,
   className,
 }: {
-  rotulo: string
+  label: string
   children: ReactNode
   mono?: boolean
-  ancho?: boolean
+  wide?: boolean
   className?: string
 }) {
   return (
-    <div className={cn(ancho && 'sm:col-span-2', className)}>
-      <Rotulo>{rotulo}</Rotulo>
+    <div className={cn(wide && 'sm:col-span-2', className)}>
+      <Label>{label}</Label>
       <div
-        data-cifra
+        data-numeric
         className={cn(
-          'mt-1 text-lectura text-tinta',
-          mono && 'font-mono text-dato tracking-[0.02em]',
+          'mt-1 text-body text-ink',
+          mono && 'font-mono text-data tracking-[0.02em]',
         )}
       >
         {children}
@@ -181,72 +181,72 @@ export function Dato({
   )
 }
 
-/* ── Cifra ────────────────────────────────────────────────────────────────
-   Número destacado de una ficha de resumen. La magnitud manda; la unidad y
-   el rótulo se retiran.                                                     */
-export function Cifra({
-  valor,
-  rotulo,
-  tono = 'tinta',
-  nota,
+/* ── Stat ─────────────────────────────────────────────────────────────────
+   Featured number of a summary card. The magnitude rules; the unit and
+   the label pull back.                                                      */
+export function Stat({
+  value,
+  label,
+  tone = 'ink',
+  note,
 }: {
-  valor: ReactNode
-  rotulo: string
-  tono?: 'tinta' | 'sello' | 'oxido' | 'ambar'
-  nota?: ReactNode
+  value: ReactNode
+  label: string
+  tone?: 'ink' | 'stamp' | 'rust' | 'amber'
+  note?: ReactNode
 }) {
   return (
     <div>
-      <Rotulo>{rotulo}</Rotulo>
+      <Label>{label}</Label>
       <div
-        data-cifra
+        data-numeric
         className={cn(
-          'mt-1.5 font-mono text-titulo leading-none font-medium tracking-[-0.01em]',
-          tono === 'tinta' && 'text-tinta',
-          tono === 'sello' && 'text-sello',
-          tono === 'oxido' && 'text-oxido',
-          tono === 'ambar' && 'text-ambar',
+          'mt-1.5 font-mono text-title leading-none font-medium tracking-[-0.01em]',
+          tone === 'ink' && 'text-ink',
+          tone === 'stamp' && 'text-stamp',
+          tone === 'rust' && 'text-rust',
+          tone === 'amber' && 'text-amber',
         )}
       >
-        {valor}
+        {value}
       </div>
-      {nota ? <div className="mt-1.5 text-nota text-tinta-3">{nota}</div> : null}
+      {note ? <div className="mt-1.5 text-note text-ink-3">{note}</div> : null}
     </div>
   )
 }
 
-/* ── Marca ────────────────────────────────────────────────────────────────
-   El sello de hule del manifiesto: marca el tramo principal de una ruta.
-   Es el único lugar donde el acento aparece como figura y no como texto.    */
-export function Marca({ titulo = 'Tramo principal' }: { titulo?: string }) {
+/* ── MainMark ─────────────────────────────────────────────────────────────
+   The rubber stamp of the manifest: it marks the main segment of a route.
+   It is the only place where the accent appears as a figure, not as text.   */
+export function MainMark({ title = 'Tramo principal' }: { title?: string }) {
   return (
     <span
-      title={titulo}
-      aria-label={titulo}
-      className="inline-flex size-[15px] shrink-0 items-center justify-center rounded-full border border-sello/50 text-[9px] leading-none font-semibold text-sello"
+      title={title}
+      aria-label={title}
+      className="inline-flex size-[15px] shrink-0 items-center justify-center rounded-full border border-stamp/50 text-[9px] leading-none font-semibold text-stamp"
     >
       P
     </span>
   )
 }
 
-/* ── Regla ────────────────────────────────────────────────────────────────
-   Separador entre bloques. La raya doble es la del encabezado de un
-   manifiesto impreso; la sencilla separa renglones.                         */
-export function Regla({
-  doble,
+/* ── Rule ─────────────────────────────────────────────────────────────────
+   Separator between blocks. The double rule is the one from a printed
+   manifest's header; the single one separates rows.                         */
+export function Rule({
+  double,
   className,
 }: {
-  doble?: boolean
+  double?: boolean
   className?: string
 }) {
   return (
     <div
       role="separator"
       className={cn(
-        doble
-          ? 'h-[3px] border-b-[3px] border-double border-raya-firme'
-          : 'h-px bg-raya',
+        double
+          ? 'h-[3px] border-b-[3px] border-double border-rule-strong'
+          : 'h-px bg-rule',
         className,
       )}
     />

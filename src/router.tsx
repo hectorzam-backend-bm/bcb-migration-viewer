@@ -1,6 +1,6 @@
 import { createRouter } from '@tanstack/react-router'
 import { routeTree } from './routeTree.gen'
-import { EstadoError, EstadoVacio } from './components/estados'
+import { ErrorState, EmptyState } from './components/states'
 
 export function getRouter() {
   return createRouter({
@@ -10,15 +10,15 @@ export function getRouter() {
     defaultStaleTime: 15_000,
     scrollRestoration: true,
     defaultErrorComponent: ({ error }) => (
-      <EstadoError
-        titulo="Algo falló en esta vista"
-        detalle={error instanceof Error ? error.message : String(error)}
+      <ErrorState
+        title="Algo falló en esta vista"
+        detail={error instanceof Error ? error.message : String(error)}
       />
     ),
     defaultNotFoundComponent: () => (
-      <EstadoVacio
-        titulo="Esa página no existe"
-        detalle="Revisa la dirección o vuelve a un catálogo desde el riel de la izquierda."
+      <EmptyState
+        title="Esa página no existe"
+        detail="Revisa la dirección o vuelve a un catálogo desde el riel de la izquierda."
       />
     ),
   })

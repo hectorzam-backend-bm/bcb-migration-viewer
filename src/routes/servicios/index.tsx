@@ -1,243 +1,243 @@
 import { useCallback } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { Clave, Hoja, Sello, SelloActividad } from '~/components/base'
-import { Encabezado } from '~/components/cascaron'
-import { EstadoError, EstadoVacio, ManifiestoCargando } from '~/components/estados'
-import { Vinculo } from '~/components/ficha'
-import { BarraDeFiltros, Buscador, FiltroLista } from '~/components/filtros'
-import { BotonActualizar } from '~/components/actualizar'
+import { KeyText, Sheet, Stamp, ActivityStamp } from '~/components/base'
+import { PageHeader } from '~/components/shell'
+import { ErrorState, EmptyState, ManifestSkeleton } from '~/components/states'
+import { TextLink } from '~/components/card'
+import { FilterBar, SearchBox, ListFilter } from '~/components/filters'
+import { RefreshButton } from '~/components/refresh'
 import {
-  Cabecera,
-  Cuerpo,
-  EnlaceDeFila,
-  Fila,
-  Manifiesto,
-  Paginacion,
+  TableHead,
+  TableBody,
+  RowLink,
+  TableRow,
+  Manifest,
+  Pagination,
   Td,
   Th,
-  ThOrden,
-} from '~/components/tabla'
-import { SIN_DATO, entero } from '~/lib/formato'
+  SortableTh,
+} from '~/components/table'
+import { NO_DATA, integer } from '~/lib/format'
 import {
-  DIRECCIONES,
-  TAMANOS,
-  booleano,
-  entero as enteroParametro,
-  limpiarBusqueda,
-  lista,
-  tamanoDePagina,
-  texto,
-  unoDe,
-} from '~/lib/parametros'
-import { ORDENES, listarServicios, type BusquedaServicios } from '~/server/servicios'
+  DIRECTIONS,
+  PAGE_SIZES,
+  bool,
+  integerParam,
+  stripDefaults,
+  list,
+  pageSize,
+  text,
+  oneOf,
+} from '~/lib/params'
+import { SERVICE_SORTS, listServices, type ServiceSearch } from '~/server/services'
 
-/* Anchos del esqueleto: el mismo reparto que las ocho columnas del manifiesto. */
-const COLUMNAS_CARGANDO = [9, 7, 24, 16, 15, 8, 7, 11]
+/* Skeleton widths: the same split as the manifest's eight columns. */
+const LOADING_COLUMNS = [9, 7, 24, 16, 15, 8, 7, 11]
 
-const POR_OMISION: BusquedaServicios = {
+const DEFAULTS: ServiceSearch = {
   q: '',
-  pagina: 1,
-  porPagina: 25,
-  orden: 'clave',
+  page: 1,
+  perPage: 25,
+  sort: 'key',
   dir: 'asc',
-  empresa: [],
-  estatus: [],
-  anticipado: [],
-  bajas: false,
+  company: [],
+  status: [],
+  earlyDispatch: [],
+  deleted: false,
 }
 
-const OPCIONES_ESTATUS = [
-  { valor: 'activa', etiqueta: 'Activo' },
-  { valor: 'inactiva', etiqueta: 'Inactivo' },
+const STATUS_OPTIONS = [
+  { value: 'active', label: 'Activo' },
+  { value: 'inactive', label: 'Inactivo' },
 ]
 
-const OPCIONES_ANTICIPADO = [
-  { valor: 'si', etiqueta: 'Permitido' },
-  { valor: 'no', etiqueta: 'No permitido' },
+const EARLY_DISPATCH_OPTIONS = [
+  { value: 'yes', label: 'Permitido' },
+  { value: 'no', label: 'No permitido' },
 ]
 
-const OPCIONES_BAJAS = [{ valor: 'incluir', etiqueta: 'Incluir servicios dados de baja' }]
+const DELETED_OPTIONS = [{ value: 'include', label: 'Incluir servicios dados de baja' }]
 
-/** Repone los valores por omisión que no viajan en la URL. */
-function completar(s: Partial<BusquedaServicios>): BusquedaServicios {
-  return { ...POR_OMISION, ...s }
+/** Restores the default values that do not travel in the URL. */
+function withDefaults(s: Partial<ServiceSearch>): ServiceSearch {
+  return { ...DEFAULTS, ...s }
 }
 
 export const Route = createFileRoute('/servicios/')({
-  // Sólo viaja en la URL lo que el usuario cambió; `completar` repone el resto.
-  validateSearch: (entrada: Record<string, unknown>): Partial<BusquedaServicios> =>
-    limpiarBusqueda(
+  // Only what the user changed travels in the URL; `withDefaults` restores the rest.
+  validateSearch: (input: Record<string, unknown>): Partial<ServiceSearch> =>
+    stripDefaults(
       {
-        q: texto(entrada.q),
-        pagina: enteroParametro(entrada.pagina, 1, 1),
-        porPagina: tamanoDePagina(entrada.porPagina),
-        orden: unoDe(entrada.orden, ORDENES, 'clave'),
-        dir: unoDe(entrada.dir, DIRECCIONES, 'asc'),
-        empresa: lista(entrada.empresa),
-        estatus: lista(entrada.estatus),
-        anticipado: lista(entrada.anticipado),
-        bajas: booleano(entrada.bajas),
+        q: text(input.q),
+        page: integerParam(input.page, 1, 1),
+        perPage: pageSize(input.perPage),
+        sort: oneOf(input.sort, SERVICE_SORTS, 'key'),
+        dir: oneOf(input.dir, DIRECTIONS, 'asc'),
+        company: list(input.company),
+        status: list(input.status),
+        earlyDispatch: list(input.earlyDispatch),
+        deleted: bool(input.deleted),
       },
-      POR_OMISION,
+      DEFAULTS,
     ),
-  loaderDeps: ({ search }) => completar(search),
-  loader: ({ deps }) => listarServicios({ data: deps }),
-  component: Pantalla,
+  loaderDeps: ({ search }) => withDefaults(search),
+  loader: ({ deps }) => listServices({ data: deps }),
+  component: Screen,
   pendingComponent: () => (
     <>
-      <Encabezado titulo="Servicios" renglon="Leyendo el catálogo…" />
+      <PageHeader title="Servicios" subtitle="Leyendo el catálogo…" />
       <div className="px-4 sm:px-8 py-6">
-        <Hoja className="overflow-hidden py-2">
-          <ManifiestoCargando columnas={COLUMNAS_CARGANDO} />
-        </Hoja>
+        <Sheet className="overflow-hidden py-2">
+          <ManifestSkeleton columns={LOADING_COLUMNS} />
+        </Sheet>
       </div>
     </>
   ),
   errorComponent: ({ error, reset }) => (
     <>
-      <Encabezado titulo="Servicios" renglon={SIN_DATO} />
-      <EstadoError
-        titulo="No fue posible leer el catálogo de servicios"
-        detalle={error instanceof Error ? error.message : String(error)}
-        alReintentar={reset}
+      <PageHeader title="Servicios" subtitle={NO_DATA} />
+      <ErrorState
+        title="No fue posible leer el catálogo de servicios"
+        detail={error instanceof Error ? error.message : String(error)}
+        onRetry={reset}
       />
     </>
   ),
 })
 
-/** `limpiarBusqueda` devuelve sólo lo que el usuario cambió; `validateSearch`
- *  repone los valores por omisión al leer la URL, así que el recorte es seguro. */
-function limpio(busqueda: BusquedaServicios): Partial<BusquedaServicios> {
-  return limpiarBusqueda(busqueda, POR_OMISION)
+/** `stripDefaults` returns only what the user changed; `validateSearch`
+ *  restores the defaults when reading the URL, so the trim is safe. */
+function prune(search: ServiceSearch): Partial<ServiceSearch> {
+  return stripDefaults(search, DEFAULTS)
 }
 
-function Pantalla() {
-  const datos = Route.useLoaderData()
-  const busqueda = completar(Route.useSearch())
+function Screen() {
+  const data = Route.useLoaderData()
+  const search = withDefaults(Route.useSearch())
   const navigate = Route.useNavigate()
 
-  /* Todo cambio de filtro o búsqueda devuelve el manifiesto a la primera hoja;
-     quien mueve la paginación manda `pagina` explícita y gana. */
-  const actualizar = useCallback(
-    (cambio: Partial<BusquedaServicios>) => {
+  /* Every filter or search change returns the manifest to the first page;
+     whoever moves the pagination sends an explicit `page` and wins. */
+  const updateSearch = useCallback(
+    (patch: Partial<ServiceSearch>) => {
       navigate({
-        search: (previa) => limpio({ ...completar(previa), pagina: 1, ...cambio }),
+        search: (prev) => prune({ ...withDefaults(prev), page: 1, ...patch }),
         replace: true,
       })
     },
     [navigate],
   )
 
-  const alBuscar = useCallback((q: string) => actualizar({ q }), [actualizar])
+  const onSearch = useCallback((q: string) => updateSearch({ q }), [updateSearch])
 
-  if (!datos.ok) {
+  if (!data.ok) {
     return (
       <>
-        <Encabezado titulo="Servicios" renglon={SIN_DATO} />
-        <EstadoError {...datos.falla} />
+        <PageHeader title="Servicios" subtitle={NO_DATA} />
+        <ErrorState {...data.failure} />
       </>
     )
   }
 
-  const { filas, total, totalCatalogo, pagina, empresas } = datos
+  const { rows, total, catalogTotal, page, companies } = data
 
-  const hayFiltros =
-    busqueda.q.trim().length > 0 ||
-    busqueda.empresa.length > 0 ||
-    busqueda.estatus.length > 0 ||
-    busqueda.anticipado.length > 0 ||
-    busqueda.bajas
+  const hasFilters =
+    search.q.trim().length > 0 ||
+    search.company.length > 0 ||
+    search.status.length > 0 ||
+    search.earlyDispatch.length > 0 ||
+    search.deleted
 
-  const renglon =
-    total === totalCatalogo
-      ? `${entero(total)} servicios`
-      : `${entero(total)} de ${entero(totalCatalogo)} servicios`
+  const subtitle =
+    total === catalogTotal
+      ? `${integer(total)} servicios`
+      : `${integer(total)} de ${integer(catalogTotal)} servicios`
 
-  function alOrdenar(campo: string) {
-    actualizar({
-      orden: campo as BusquedaServicios['orden'],
-      dir: busqueda.orden === campo && busqueda.dir === 'asc' ? 'desc' : 'asc',
+  function onSort(field: string) {
+    updateSearch({
+      sort: field as ServiceSearch['sort'],
+      dir: search.sort === field && search.dir === 'asc' ? 'desc' : 'asc',
     })
   }
 
   return (
     <>
-      <Encabezado
-        acciones={<BotonActualizar />}
-        titulo="Servicios"
-        renglon={
+      <PageHeader
+        actions={<RefreshButton />}
+        title="Servicios"
+        subtitle={
           <>
-            {renglon}
-            {busqueda.bajas ? <span className="text-tinta-4"> · con bajas</span> : null}
+            {subtitle}
+            {search.deleted ? <span className="text-ink-4"> · con bajas</span> : null}
           </>
         }
       />
 
       <div className="px-4 sm:px-8 py-6">
-        <Hoja className="overflow-hidden">
-          <BarraDeFiltros
-            hayFiltros={hayFiltros}
-            alLimpiar={() =>
+        <Sheet className="overflow-hidden">
+          <FilterBar
+            hasFilters={hasFilters}
+            onClear={() =>
               navigate({
-                search: () => limpio({ ...POR_OMISION, porPagina: busqueda.porPagina }),
+                search: () => prune({ ...DEFAULTS, perPage: search.perPage }),
                 replace: true,
               })
             }
           >
-            <Buscador
+            <SearchBox
               className="w-full max-w-[19rem]"
-              valor={busqueda.q}
-              alCambiar={alBuscar}
-              marcador="Buscar clave, número o nombre…"
+              value={search.q}
+              onChange={onSearch}
+              placeholder="Buscar clave, número o nombre…"
             />
-            <FiltroLista
-              nombre="Empresa"
-              buscable
-              opciones={empresas}
-              seleccion={busqueda.empresa}
-              alCambiar={(empresa) => actualizar({ empresa })}
+            <ListFilter
+              label="Empresa"
+              searchable
+              options={companies}
+              selection={search.company}
+              onChange={(company) => updateSearch({ company })}
             />
-            <FiltroLista
-              nombre="Estatus"
-              opciones={OPCIONES_ESTATUS}
-              seleccion={busqueda.estatus}
-              alCambiar={(estatus) => actualizar({ estatus })}
+            <ListFilter
+              label="Estatus"
+              options={STATUS_OPTIONS}
+              selection={search.status}
+              onChange={(status) => updateSearch({ status })}
             />
-            <FiltroLista
-              nombre="Despacho anticipado"
-              opciones={OPCIONES_ANTICIPADO}
-              seleccion={busqueda.anticipado}
-              alCambiar={(anticipado) => actualizar({ anticipado })}
+            <ListFilter
+              label="Despacho anticipado"
+              options={EARLY_DISPATCH_OPTIONS}
+              selection={search.earlyDispatch}
+              onChange={(earlyDispatch) => updateSearch({ earlyDispatch })}
             />
-            <FiltroLista
-              nombre="Bajas"
-              opciones={OPCIONES_BAJAS}
-              seleccion={busqueda.bajas ? ['incluir'] : []}
-              alCambiar={(seleccion) => actualizar({ bajas: seleccion.includes('incluir') })}
+            <ListFilter
+              label="Bajas"
+              options={DELETED_OPTIONS}
+              selection={search.deleted ? ['include'] : []}
+              onChange={(selection) => updateSearch({ deleted: selection.includes('include') })}
             />
-          </BarraDeFiltros>
+          </FilterBar>
 
-          {filas.length === 0 ? (
-            totalCatalogo === 0 && !hayFiltros ? (
-              <EstadoVacio
-                titulo="El catálogo de servicios está vacío"
-                detalle="La base conectada no tiene servicios migrados. Confirma que DATABASE_URL apunta a la base correcta."
+          {rows.length === 0 ? (
+            catalogTotal === 0 && !hasFilters ? (
+              <EmptyState
+                title="El catálogo de servicios está vacío"
+                detail="La base conectada no tiene servicios migrados. Confirma que DATABASE_URL apunta a la base correcta."
               />
             ) : (
-              <EstadoVacio
-                titulo="Ningún servicio coincide con los filtros"
-                detalle="Ajusta la búsqueda o retira algún filtro para volver a ver el catálogo completo."
-                accion={
-                  hayFiltros ? (
+              <EmptyState
+                title="Ningún servicio coincide con los filtros"
+                detail="Ajusta la búsqueda o retira algún filtro para volver a ver el catálogo completo."
+                action={
+                  hasFilters ? (
                     <button
                       type="button"
                       onClick={() =>
                         navigate({
-                          search: () => limpio({ ...POR_OMISION, porPagina: busqueda.porPagina }),
+                          search: () => prune({ ...DEFAULTS, perPage: search.perPage }),
                           replace: true,
                         })
                       }
-                      className="inline-flex h-8 items-center rounded-chip border border-raya px-3 font-mono text-nota font-medium tracking-[0.08em] text-tinta-2 uppercase transition-[colors,transform] duration-100 hover:border-raya-firme hover:bg-renglon hover:text-tinta active:scale-[0.97]"
+                      className="inline-flex h-8 items-center rounded-chip border border-rule px-3 font-mono text-note font-medium tracking-[0.08em] text-ink-2 uppercase transition-[colors,transform] duration-100 hover:border-rule-strong hover:bg-row hover:text-ink active:scale-[0.97]"
                     >
                       Limpiar filtros
                     </button>
@@ -246,120 +246,120 @@ function Pantalla() {
               />
             )
           ) : (
-            <Manifiesto etiqueta="Servicios migrados">
-              <Cabecera>
-                <ThOrden
-                  campo="clave"
-                  ordenActual={busqueda.orden}
-                  direccion={busqueda.dir}
-                  alOrdenar={alOrdenar}
+            <Manifest label="Servicios migrados">
+              <TableHead>
+                <SortableTh
+                  field="key"
+                  currentSort={search.sort}
+                  direction={search.dir}
+                  onSort={onSort}
                 >
                   Clave servicio
-                </ThOrden>
-                <ThOrden
-                  campo="numero"
-                  numerica
-                  ordenActual={busqueda.orden}
-                  direccion={busqueda.dir}
-                  alOrdenar={alOrdenar}
+                </SortableTh>
+                <SortableTh
+                  field="number"
+                  numeric
+                  currentSort={search.sort}
+                  direction={search.dir}
+                  onSort={onSort}
                 >
                   No. servicio
-                </ThOrden>
-                <ThOrden
-                  campo="nombre"
-                  ordenActual={busqueda.orden}
-                  direccion={busqueda.dir}
-                  alOrdenar={alOrdenar}
+                </SortableTh>
+                <SortableTh
+                  field="name"
+                  currentSort={search.sort}
+                  direction={search.dir}
+                  onSort={onSort}
                 >
                   Nombre del servicio
-                </ThOrden>
+                </SortableTh>
                 <Th>Nombre corto</Th>
-                <ThOrden
-                  campo="empresa"
-                  ordenActual={busqueda.orden}
-                  direccion={busqueda.dir}
-                  alOrdenar={alOrdenar}
+                <SortableTh
+                  field="company"
+                  currentSort={search.sort}
+                  direction={search.dir}
+                  onSort={onSort}
                 >
                   Empresa
-                </ThOrden>
-                <Th numerica>Terminales</Th>
-                <ThOrden
-                  campo="rutas"
-                  numerica
-                  ordenActual={busqueda.orden}
-                  direccion={busqueda.dir}
-                  alOrdenar={alOrdenar}
+                </SortableTh>
+                <Th numeric>Terminales</Th>
+                <SortableTh
+                  field="routes"
+                  numeric
+                  currentSort={search.sort}
+                  direction={search.dir}
+                  onSort={onSort}
                 >
                   Rutas
-                </ThOrden>
+                </SortableTh>
                 <Th>Estatus</Th>
-              </Cabecera>
+              </TableHead>
 
-              <Cuerpo>
-                {filas.map((s) => (
-                  <Fila key={s.id} atenuada={s.eliminado}>
+              <TableBody>
+                {rows.map((s) => (
+                  <TableRow key={s.id} dimmed={s.isDeleted}>
                     <Td>
-                      <EnlaceDeFila to="/servicios/$id" params={{ id: s.id }}>
-                        <Clave enfasis>{s.clave || SIN_DATO}</Clave>
-                      </EnlaceDeFila>
+                      <RowLink to="/servicios/$id" params={{ id: s.id }}>
+                        <KeyText emphasis>{s.key || NO_DATA}</KeyText>
+                      </RowLink>
                     </Td>
-                    <Td numerica className="text-tinta-2">
-                      {s.numero || SIN_DATO}
+                    <Td numeric className="text-ink-2">
+                      {s.number || NO_DATA}
                     </Td>
                     <Td>
-                      <span className="block max-w-[26rem] truncate" title={s.nombre}>
-                        {s.nombre || SIN_DATO}
+                      <span className="block max-w-[26rem] truncate" title={s.name}>
+                        {s.name || NO_DATA}
                       </span>
                     </Td>
-                    <Td className="text-tinta-2">{s.nombreCorto || SIN_DATO}</Td>
+                    <Td className="text-ink-2">{s.shortName || NO_DATA}</Td>
                     <Td>
-                      <Vinculo
+                      <TextLink
                         to="/empresas/$id"
-                        params={{ id: s.empresaId }}
+                        params={{ id: s.companyId }}
                         className="relative z-10"
                       >
-                        {s.empresaNombre || s.empresaClave || SIN_DATO}
-                      </Vinculo>
+                        {s.companyName || s.companyKey || NO_DATA}
+                      </TextLink>
                     </Td>
-                    <Td numerica>
-                      <span className={s.terminales === 0 ? 'text-tinta-4' : undefined}>
-                        {entero(s.terminales)}
+                    <Td numeric>
+                      <span className={s.stations === 0 ? 'text-ink-4' : undefined}>
+                        {integer(s.stations)}
                       </span>
                     </Td>
-                    <Td numerica>
-                      <span className={s.rutas === 0 ? 'text-tinta-4' : undefined}>
-                        {entero(s.rutas)}
+                    <Td numeric>
+                      <span className={s.routes === 0 ? 'text-ink-4' : undefined}>
+                        {integer(s.routes)}
                       </span>
                     </Td>
                     <Td>
                       <span className="flex items-center gap-2">
-                        <SelloActividad activa={s.activo} eliminada={s.eliminado} />
-                        {s.hcmDesactivado ? (
-                          <Sello
-                            tono="aviso"
-                            titulo="hcmDisabled — la sincronización HCM lo marcó como inhabilitado"
+                        <ActivityStamp active={s.isActive} deleted={s.isDeleted} />
+                        {s.hcmDisabled ? (
+                          <Stamp
+                            tone="warning"
+                            title="hcmDisabled — la sincronización HCM lo marcó como inhabilitado"
                           >
                             HCM
-                          </Sello>
+                          </Stamp>
                         ) : null}
                       </span>
                     </Td>
-                  </Fila>
+                  </TableRow>
                 ))}
-              </Cuerpo>
-            </Manifiesto>
+              </TableBody>
+            </Manifest>
           )}
 
-          <Paginacion
-            pagina={pagina}
-            porPagina={busqueda.porPagina}
+          <Pagination
+            page={page}
+            perPage={search.perPage}
             total={total}
-            tamanos={[...TAMANOS]}
-            sustantivo="servicios"
-            alCambiarPagina={(p) => actualizar({ pagina: p })}
-            alCambiarTamano={(t) => actualizar({ porPagina: t })}
+            pageSizes={[...PAGE_SIZES]}
+            noun="servicios"
+            onPageChange={(p) => updateSearch({ page: p })}
+            onPageSizeChange={(t) => updateSearch({ perPage: t })}
           />
-        </Hoja>
+        </Sheet>
       </div>
     </>
   )

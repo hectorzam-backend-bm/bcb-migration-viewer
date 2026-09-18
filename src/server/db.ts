@@ -1,24 +1,24 @@
-import type { PrismaClient as TipoPrismaClient } from '../../generated/prisma/client.ts'
+import type { PrismaClient as GeneratedPrismaClient } from '../../generated/prisma/client.ts'
 
 /**
- * Prisma y el driver `pg` se cargan con importación dinámica detrás de
+ * Prisma and the `pg` driver are loaded with a dynamic import behind
  * `import.meta.env.SSR`.
  *
- * No se usa el marcador `@tanstack/react-start/server-only`: este módulo SÍ es
- * alcanzable desde el grafo del cliente, porque las funciones de servidor viven en
- * módulos compartidos que el navegador necesita para resolver el puente RPC. El
- * marcador haría fallar la compilación en vez de resolver nada.
+ * The `@tanstack/react-start/server-only` marker is not used: this module IS
+ * reachable from the client graph, because server functions live in shared
+ * modules that the browser needs in order to resolve the RPC bridge. The marker
+ * would break the build instead of fixing anything.
  *
- * En desarrollo, Vite mete los módulos de `src/server/` en el grafo del cliente
- * (los necesita para resolver las llamadas RPC de las funciones de servidor), así
- * que una importación estática arrastraba `@prisma/adapter-pg` y el cliente
- * generado hasta el navegador, que reventaba con `Buffer is not defined`.
+ * In development, Vite pulls the `src/server/` modules into the client graph
+ * (it needs them to resolve the RPC calls of the server functions), so a static
+ * import dragged `@prisma/adapter-pg` and the generated client all the way to
+ * the browser, which blew up with `Buffer is not defined`.
  *
- * `import.meta.env.SSR` es una constante que Vite sustituye en tiempo de
- * compilación: en el cliente la rama queda como código muerto y estas
- * importaciones nunca se evalúan ni se descargan. La carga es ansiosa —no
- * perezosa— a propósito, para que `db.segment.fields` siga siendo una lectura
- * síncrona en los `where` que comparan dos columnas.
+ * `import.meta.env.SSR` is a constant that Vite substitutes at build time: on
+ * the client the branch is left as dead code and these imports are never
+ * evaluated nor downloaded. The load is eager —not lazy— on purpose, so that
+ * `db.segment.fields` stays a synchronous read in the `where` clauses that
+ * compare two columns.
  */
 const prisma = import.meta.env.SSR
   ? {
@@ -27,25 +27,25 @@ const prisma = import.meta.env.SSR
     }
   : null
 
-function modulos() {
+function requirePrismaModules() {
   if (!prisma) {
     throw new Error(
-      'El cliente de Prisma sólo existe en el servidor. Esto significa que ' +
-        'src/server/db.ts se evaluó en el navegador: revisa quién lo importó.',
+      'The Prisma client only exists on the server. This means that ' +
+        'src/server/db.ts was evaluated in the browser: check who imported it.',
     )
   }
   return prisma
 }
 
 /**
- * Este visor es de SÓLO LECTURA.
+ * This viewer is READ-ONLY.
  *
- * Dos candados, a propósito redundantes:
- *  1. Se recomienda apuntar DATABASE_URL a un usuario con permisos únicamente de SELECT.
- *  2. La extensión de abajo rechaza cualquier operación de escritura antes de que salga
- *     de este proceso, aunque el usuario de base de datos tuviera permisos de más.
+ * Two locks, redundant on purpose:
+ *  1. DATABASE_URL should point at a user with SELECT-only permissions.
+ *  2. The extension below rejects any write operation before it leaves this
+ *     process, even if the database user happened to have extra permissions.
  */
-const OPERACIONES_DE_LECTURA = new Set([
+const READ_OPERATIONS = new Set([
   'findUnique',
   'findUniqueOrThrow',
   'findFirst',
@@ -56,44 +56,44 @@ const OPERACIONES_DE_LECTURA = new Set([
   'count',
 ])
 
-export class ErrorDeEscrituraBloqueada extends Error {
-  constructor(operacion: string, modelo: string | undefined) {
+export class BlockedWriteError extends Error {
+  constructor(operation: string, model: string | undefined) {
     super(
-      `Operación de escritura bloqueada: ${modelo ?? 'modelo'}.${operacion}(). ` +
-        'Este visor es de sólo lectura.',
+      `Blocked write operation: ${model ?? 'model'}.${operation}(). ` +
+        'This viewer is read-only.',
     )
-    this.name = 'ErrorDeEscrituraBloqueada'
+    this.name = 'BlockedWriteError'
   }
 }
 
-export class ErrorDeConexion extends Error {
-  readonly sugerencia: string
-  constructor(mensaje: string, sugerencia: string) {
-    super(mensaje)
-    this.name = 'ErrorDeConexion'
-    this.sugerencia = sugerencia
+export class ConnectionError extends Error {
+  readonly suggestion: string
+  constructor(message: string, suggestion: string) {
+    super(message)
+    this.name = 'ConnectionError'
+    this.suggestion = suggestion
   }
 }
 
-function construirCliente() {
+function buildClient() {
   const connectionString = process.env.DATABASE_URL
 
   if (!connectionString) {
-    throw new ErrorDeConexion(
+    throw new ConnectionError(
       'Falta DATABASE_URL',
       'Copia .env.example a .env y define la cadena de conexión a tu Postgres local.',
     )
   }
 
-  const { PrismaPg, PrismaClient } = modulos()
+  const { PrismaPg, PrismaClient } = requirePrismaModules()
   const adapter = new PrismaPg({ connectionString })
 
   return new PrismaClient({ adapter }).$extends({
     query: {
       $allModels: {
         async $allOperations({ model, operation, args, query }) {
-          if (!OPERACIONES_DE_LECTURA.has(operation)) {
-            throw new ErrorDeEscrituraBloqueada(operation, model)
+          if (!READ_OPERATIONS.has(operation)) {
+            throw new BlockedWriteError(operation, model)
           }
           return query(args)
         },
@@ -102,75 +102,75 @@ function construirCliente() {
   })
 }
 
-type Cliente = ReturnType<typeof construirCliente>
-export type ClientePrisma = TipoPrismaClient
+type Client = ReturnType<typeof buildClient>
+export type PrismaClientType = GeneratedPrismaClient
 
-const global_ = globalThis as unknown as { __prismaVisor?: Cliente }
+const global_ = globalThis as unknown as { __prismaViewer?: Client }
 
-function obtenerCliente(): Cliente {
-  if (!global_.__prismaVisor) {
-    global_.__prismaVisor = construirCliente()
+function getClient(): Client {
+  if (!global_.__prismaViewer) {
+    global_.__prismaViewer = buildClient()
   }
-  return global_.__prismaVisor
+  return global_.__prismaViewer
 }
 
 /**
- * Se construye al primer uso, no al importar: si falta DATABASE_URL el visor
- * debe poder pintar una pantalla que lo explique, no caerse al arrancar.
+ * Built on first use, not on import: if DATABASE_URL is missing the viewer must
+ * be able to paint a screen that explains it, not crash at startup.
  */
-export const db = new Proxy({} as Cliente, {
-  get(_destino, propiedad) {
-    const valor = Reflect.get(obtenerCliente() as object, propiedad)
-    return typeof valor === 'function' ? valor.bind(obtenerCliente()) : valor
+export const db = new Proxy({} as Client, {
+  get(_target, property) {
+    const value = Reflect.get(getClient() as object, property)
+    return typeof value === 'function' ? value.bind(getClient()) : value
   },
 })
 
-/** Traduce fallas de conexión a algo que la interfaz pueda explicar. */
-export function describirFalla(error: unknown): {
-  titulo: string
-  detalle: string
-  sugerencia: string
+/** Translates connection failures into something the interface can explain. */
+export function describeFailure(error: unknown): {
+  title: string
+  detail: string
+  suggestion: string
 } {
-  if (error instanceof ErrorDeConexion) {
-    return { titulo: error.message, detalle: '', sugerencia: error.sugerencia }
+  if (error instanceof ConnectionError) {
+    return { title: error.message, detail: '', suggestion: error.suggestion }
   }
 
-  const mensaje = error instanceof Error ? error.message : String(error)
+  const message = error instanceof Error ? error.message : String(error)
 
-  if (/ECONNREFUSED|ENOTFOUND|EAI_AGAIN/i.test(mensaje)) {
+  if (/ECONNREFUSED|ENOTFOUND|EAI_AGAIN/i.test(message)) {
     return {
-      titulo: 'No hay respuesta de la base de datos',
-      detalle: mensaje,
-      sugerencia:
+      title: 'No hay respuesta de la base de datos',
+      detail: message,
+      suggestion:
         'Verifica que Postgres esté corriendo y que el host y el puerto de DATABASE_URL sean correctos.',
     }
   }
-  if (/password authentication failed|role .* does not exist/i.test(mensaje)) {
+  if (/password authentication failed|role .* does not exist/i.test(message)) {
     return {
-      titulo: 'Credenciales rechazadas',
-      detalle: mensaje,
-      sugerencia: 'Revisa el usuario y la contraseña en DATABASE_URL.',
+      title: 'Credenciales rechazadas',
+      detail: message,
+      suggestion: 'Revisa el usuario y la contraseña en DATABASE_URL.',
     }
   }
-  if (/database .* does not exist/i.test(mensaje)) {
+  if (/database .* does not exist/i.test(message)) {
     return {
-      titulo: 'La base de datos no existe',
-      detalle: mensaje,
-      sugerencia: 'Revisa el nombre de la base al final de DATABASE_URL.',
+      title: 'La base de datos no existe',
+      detail: message,
+      suggestion: 'Revisa el nombre de la base al final de DATABASE_URL.',
     }
   }
-  if (/relation .* does not exist|does not exist in the current database/i.test(mensaje)) {
+  if (/relation .* does not exist|does not exist in the current database/i.test(message)) {
     return {
-      titulo: 'El esquema no coincide',
-      detalle: mensaje,
-      sugerencia:
+      title: 'El esquema no coincide',
+      detail: message,
+      suggestion:
         'La base conectada no tiene las tablas que describe prisma/schema.prisma. Confirma que apuntas a la base migrada.',
     }
   }
 
   return {
-    titulo: 'Error al consultar',
-    detalle: mensaje,
-    sugerencia: 'Revisa la consola del servidor para el detalle completo.',
+    title: 'Error al consultar',
+    detail: message,
+    suggestion: 'Revisa la consola del servidor para el detalle completo.',
   }
 }

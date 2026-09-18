@@ -1,25 +1,25 @@
 /**
- * Entrada de producción.
+ * Production entry point.
  *
- * `vite build` emite un manejador `fetch` estándar (dist/server/server.js), no un
- * servidor que escuche un puerto. Esta envoltura sirve los archivos estáticos del
- * cliente y le pasa todo lo demás al manejador.
+ * `vite build` emits a standard `fetch` handler (dist/server/server.js), not a
+ * server that listens on a port. This wrapper serves the client's static files
+ * and hands everything else to the handler.
  *
- * Para el uso diario del visor basta `pnpm dev`; esto existe para poder levantar
- * la compilación de producción con `pnpm start`.
+ * For day-to-day use of the viewer `pnpm dev` is enough; this exists to be able
+ * to run the production build with `pnpm start`.
  */
-// Fuera del servidor de desarrollo nadie lee .env por nosotros.
+// Outside the dev server nobody reads .env for us.
 import 'dotenv/config'
 import { serve } from 'srvx'
 import { staticMiddleware } from 'srvx/static'
-import manejador from './dist/server/server.js'
+import handler from './dist/server/server.js'
 
-const puerto = Number(process.env.PORT ?? 3000)
+const port = Number(process.env.PORT ?? 3000)
 
 serve({
-  port: puerto,
+  port,
   middleware: [staticMiddleware({ dir: 'dist/client' })],
-  fetch: (peticion) => manejador.fetch(peticion),
+  fetch: (request) => handler.fetch(request),
 })
 
-console.log(`Visor de migración escuchando en http://localhost:${puerto}`)
+console.log(`Migration viewer listening on http://localhost:${port}`)

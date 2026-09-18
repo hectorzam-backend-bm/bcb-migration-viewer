@@ -1,498 +1,498 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import type { LinkProps } from '@tanstack/react-router'
 import { ArrowUpRight } from 'lucide-react'
-import { Cifra, Clave, Hoja, Rotulo, Sello } from '~/components/base'
-import { Encabezado } from '~/components/cascaron'
-import { EstadoError, ManifiestoCargando } from '~/components/estados'
-import { Bloque, Vinculo } from '~/components/ficha'
-import { Cabecera, Cuerpo, EnlaceDeFila, Fila, Manifiesto, Td, Th } from '~/components/tabla'
-import { BotonActualizar } from '~/components/actualizar'
+import { Stat, KeyText, Sheet, Label, Stamp } from '~/components/base'
+import { PageHeader } from '~/components/shell'
+import { ErrorState, ManifestSkeleton } from '~/components/states'
+import { Block, TextLink } from '~/components/card'
+import { TableHead, TableBody, RowLink, TableRow, Manifest, Td, Th } from '~/components/table'
+import { RefreshButton } from '~/components/refresh'
 import { cn } from '~/lib/cn'
-import { entero, fechaHora } from '~/lib/formato'
-import { obtenerResumen, type ClaveCatalogo, type ClaveRevision } from '~/server/resumen'
+import { integer, dateTime } from '~/lib/format'
+import { getSummary, type CatalogKey, type CheckKey } from '~/server/summary'
 
 /* ───────────────────────────────────────────────────────────────────────────
-   La portada del visor. Es la única pantalla con un punto focal grande: el
-   resto del visor son manifiestos. Responde a la pregunta con la que llega el
-   analista —¿puedo confiar en esta migración?— antes de que abra un catálogo.
+   The viewer's summary page. It is the only screen with a large focal point:
+   the rest of the viewer is manifests. It answers the question the analyst
+   arrives with —can I trust this migration?— before they open a catalog.
    ─────────────────────────────────────────────────────────────────────────── */
 
-type Catalogo = {
-  clave: ClaveCatalogo
-  rotulo: string
-  a: LinkProps['to']
-  /** Lo que hay que añadir a la dirección para llegar a ESTE listado. */
-  busqueda?: Record<string, unknown>
-  inactivos: string
-  bajas: string
+type Catalog = {
+  key: CatalogKey
+  label: string
+  to: LinkProps['to']
+  /** What has to be added to the URL to reach THIS listing. */
+  search?: Record<string, unknown>
+  inactive: string
+  deleted: string
 }
 
-const CATALOGOS: ReadonlyArray<Catalogo> = [
+const CATALOGS: ReadonlyArray<Catalog> = [
   {
-    clave: 'empresas',
-    rotulo: 'Empresas',
-    a: '/empresas',
-    inactivos: 'inactivas',
-    bajas: 'dadas de baja',
+    key: 'companies',
+    label: 'Empresas',
+    to: '/empresas',
+    inactive: 'inactivas',
+    deleted: 'dadas de baja',
   },
   {
-    clave: 'servicios',
-    rotulo: 'Servicios',
-    a: '/servicios',
-    inactivos: 'inactivos',
-    bajas: 'dados de baja',
+    key: 'services',
+    label: 'Servicios',
+    to: '/servicios',
+    inactive: 'inactivos',
+    deleted: 'dados de baja',
   },
   {
-    clave: 'terminales',
-    rotulo: 'Terminales',
-    a: '/terminales',
-    inactivos: 'inactivas',
-    bajas: 'dadas de baja',
+    key: 'stations',
+    label: 'Terminales',
+    to: '/terminales',
+    inactive: 'inactivas',
+    deleted: 'dadas de baja',
   },
   {
-    clave: 'rutas',
-    rotulo: 'Rutas',
-    a: '/rutas',
-    busqueda: { vista: 'rutas' },
-    inactivos: 'inactivas',
-    bajas: 'dadas de baja',
+    key: 'routes',
+    label: 'Rutas',
+    to: '/rutas',
+    search: { view: 'routes' },
+    inactive: 'inactivas',
+    deleted: 'dadas de baja',
   },
   {
-    clave: 'tramos',
-    rotulo: 'Tramos',
-    a: '/rutas',
-    busqueda: { vista: 'tramos' },
-    inactivos: 'inactivos',
-    bajas: 'dados de baja',
+    key: 'segments',
+    label: 'Tramos',
+    to: '/rutas',
+    search: { view: 'segments' },
+    inactive: 'inactivos',
+    deleted: 'dados de baja',
   },
 ]
 
-type Revision = {
-  clave: ClaveRevision
-  titulo: string
-  explicacion: string
-  catalogo: string
-  a: LinkProps['to']
-  busqueda?: Record<string, unknown>
+type Check = {
+  key: CheckKey
+  title: string
+  explanation: string
+  catalog: string
+  to: LinkProps['to']
+  search?: Record<string, unknown>
 }
 
-/* El orden de esta lista es el de captura; la pantalla la reordena para que lo
-   anómalo quede arriba. Ninguna revisión enlaza a un listado filtrado: hoy
-   ningún filtro expresa estas preguntas, y un enlace que no filtra miente. */
-const REVISIONES: ReadonlyArray<Revision> = [
+/* The order of this list is the capture order; the screen reorders it so the
+   anomalous rows sit on top. No check links to a filtered listing: today no
+   filter expresses these questions, and a link that does not filter lies. */
+const CHECKS: ReadonlyArray<Check> = [
   {
-    clave: 'rutasSinTramoPrincipal',
-    titulo: 'Rutas activas sin tramo principal',
-    explicacion:
+    key: 'routesWithoutMainSegment',
+    title: 'Rutas activas sin tramo principal',
+    explanation:
       'Toda ruta activa debería tener un tramo marcado como principal: el que cubre su origen y su destino. Sin él la ruta no se puede vender completa.',
-    catalogo: 'Rutas',
-    a: '/rutas',
-    busqueda: { vista: 'rutas' },
+    catalog: 'Rutas',
+    to: '/rutas',
+    search: { view: 'routes' },
   },
   {
-    clave: 'rutasSinTramos',
-    titulo: 'Rutas sin ningún tramo',
-    explicacion:
+    key: 'routesWithoutSegments',
+    title: 'Rutas sin ningún tramo',
+    explanation:
       'La ruta migró, pero no trae tramos vigentes colgando de ella. Quedó como cascarón.',
-    catalogo: 'Rutas',
-    a: '/rutas',
-    busqueda: { vista: 'rutas' },
+    catalog: 'Rutas',
+    to: '/rutas',
+    search: { view: 'routes' },
   },
   {
-    clave: 'tramosEnCirculo',
-    titulo: 'Tramos que salen y llegan a la misma terminal',
-    explicacion:
+    key: 'circularSegments',
+    title: 'Tramos que salen y llegan a la misma terminal',
+    explanation:
       'El origen y el destino del tramo apuntan a la misma terminal: casi siempre es un error de captura arrastrado desde el sistema anterior.',
-    catalogo: 'Tramos',
-    a: '/rutas',
-    busqueda: { vista: 'tramos' },
+    catalog: 'Tramos',
+    to: '/rutas',
+    search: { view: 'segments' },
   },
   {
-    clave: 'serviciosSinRutas',
-    titulo: 'Servicios sin rutas',
-    explicacion: 'El servicio no tiene ninguna ruta vigente asignada, así que no opera nada.',
-    catalogo: 'Servicios',
-    a: '/servicios',
+    key: 'servicesWithoutRoutes',
+    title: 'Servicios sin rutas',
+    explanation: 'El servicio no tiene ninguna ruta vigente asignada, así que no opera nada.',
+    catalog: 'Servicios',
+    to: '/servicios',
   },
   {
-    clave: 'serviciosSinTerminales',
-    titulo: 'Servicios sin terminales',
-    explicacion:
+    key: 'servicesWithoutStations',
+    title: 'Servicios sin terminales',
+    explanation:
       'El servicio no está asociado a ninguna terminal vigente: no tiene dónde vender ni despachar.',
-    catalogo: 'Servicios',
-    a: '/servicios',
+    catalog: 'Servicios',
+    to: '/servicios',
   },
   {
-    clave: 'terminalesSinServicios',
-    titulo: 'Terminales sin servicios',
-    explicacion:
+    key: 'stationsWithoutServices',
+    title: 'Terminales sin servicios',
+    explanation:
       'La terminal existe pero ningún servicio vigente la usa. Puede ser correcto en una terminal recién dada de alta.',
-    catalogo: 'Terminales',
-    a: '/terminales',
+    catalog: 'Terminales',
+    to: '/terminales',
   },
   {
-    clave: 'empresasSinServicios',
-    titulo: 'Empresas sin servicios',
-    explicacion: 'La empresa migró sin ningún servicio vigente bajo ella.',
-    catalogo: 'Empresas',
-    a: '/empresas',
+    key: 'companiesWithoutServices',
+    title: 'Empresas sin servicios',
+    explanation: 'La empresa migró sin ningún servicio vigente bajo ella.',
+    catalog: 'Empresas',
+    to: '/empresas',
   },
   {
-    clave: 'rutasSinCanales',
-    titulo: 'Rutas sin canales de venta',
-    explicacion:
+    key: 'routesWithoutSalesChannels',
+    title: 'Rutas sin canales de venta',
+    explanation:
       'Sin al menos un canal asociado, la ruta no aparece en ningún punto de venta: ni taquilla, ni web, ni app.',
-    catalogo: 'Rutas',
-    a: '/rutas',
-    busqueda: { vista: 'rutas' },
+    catalog: 'Rutas',
+    to: '/rutas',
+    search: { view: 'routes' },
   },
   {
-    clave: 'rutasSinTiposDePasajero',
-    titulo: 'Rutas sin tipos de pasajero',
-    explicacion:
+    key: 'routesWithoutPassengerTypes',
+    title: 'Rutas sin tipos de pasajero',
+    explanation:
       'Sin tipos de pasajero no hay tarifa que cotizar: no se puede emitir un boleto de esa ruta.',
-    catalogo: 'Rutas',
-    a: '/rutas',
-    busqueda: { vista: 'rutas' },
+    catalog: 'Rutas',
+    to: '/rutas',
+    search: { view: 'routes' },
   },
 ]
 
-const FILAS_HCM = [
-  { clave: 'empresas', rotulo: 'Empresas', a: '/empresas', filtrable: true },
-  { clave: 'servicios', rotulo: 'Servicios', a: '/servicios', filtrable: false },
+const HCM_ROWS = [
+  { key: 'companies', label: 'Empresas', to: '/empresas', filterable: true },
+  { key: 'services', label: 'Servicios', to: '/servicios', filterable: false },
 ] as const
 
-const COLUMNAS_CARGANDO = [38, 12, 10, 10]
+const LOADING_COLUMNS = [38, 12, 10, 10]
 
 export const Route = createFileRoute('/')({
-  loader: () => obtenerResumen(),
-  component: Portada,
+  loader: () => getSummary(),
+  component: SummaryPage,
   pendingComponent: () => (
     <>
-      <Encabezado titulo="Resumen" renglon="Contando registros…" />
+      <PageHeader title="Resumen" subtitle="Contando registros…" />
       <div className="px-4 py-6">
-        <ManifiestoCargando columnas={COLUMNAS_CARGANDO} renglones={9} />
+        <ManifestSkeleton columns={LOADING_COLUMNS} rows={9} />
       </div>
     </>
   ),
   errorComponent: ({ error, reset }) => (
     <>
-      <Encabezado titulo="Resumen" renglon="Estado de la migración" />
-      <EstadoError
-        titulo="No fue posible construir el resumen"
-        detalle={error instanceof Error ? error.message : String(error)}
-        sugerencia="Vuelve a intentarlo; si persiste, revisa la conexión a la base de datos."
-        alReintentar={reset}
+      <PageHeader title="Resumen" subtitle="Estado de la migración" />
+      <ErrorState
+        title="No fue posible construir el resumen"
+        detail={error instanceof Error ? error.message : String(error)}
+        suggestion="Vuelve a intentarlo; si persiste, revisa la conexión a la base de datos."
+        onRetry={reset}
       />
     </>
   ),
 })
 
-function Portada() {
-  const datos = Route.useLoaderData()
+function SummaryPage() {
+  const data = Route.useLoaderData()
   const router = useRouter()
 
-  // Si la base no respondió, la portada entera cae al error: pintar tarjetas en
-  // cero diría que la migración está vacía, que es una mentira distinta.
-  if (!datos.ok) {
+  // If the database did not answer, the whole summary page falls to the error:
+  // painting cards at zero would say the migration is empty, a different lie.
+  if (!data.ok) {
     return (
       <>
-        <Encabezado titulo="Resumen" renglon="Estado de la migración" />
-        <EstadoError {...datos.falla} alReintentar={() => router.invalidate()} />
+        <PageHeader title="Resumen" subtitle="Estado de la migración" />
+        <ErrorState {...data.failure} onRetry={() => router.invalidate()} />
       </>
     )
   }
 
-  const { catalogos, revisiones, hcm, generadoEn } = datos
+  const { catalogs, checks, hcm, generatedAt } = data
 
-  const totalVigentes = CATALOGOS.reduce((suma, c) => suma + catalogos[c.clave].vigentes, 0)
-  const totalInactivos = CATALOGOS.reduce((suma, c) => suma + catalogos[c.clave].inactivos, 0)
-  const totalBajas = CATALOGOS.reduce((suma, c) => suma + catalogos[c.clave].bajas, 0)
+  const totalCurrent = CATALOGS.reduce((total, c) => total + catalogs[c.key].current, 0)
+  const totalInactive = CATALOGS.reduce((total, c) => total + catalogs[c.key].inactive, 0)
+  const totalDeleted = CATALOGS.reduce((total, c) => total + catalogs[c.key].deleted, 0)
 
-  // Lo anómalo arriba: primero lo que tiene hallazgos, de mayor a menor.
-  const filas = REVISIONES.map((r) => ({ ...r, conteo: revisiones[r.clave] })).sort(
-    (a, b) => b.conteo - a.conteo,
+  // Anomalies on top: first the ones with findings, largest to smallest.
+  const rows = CHECKS.map((r) => ({ ...r, count: checks[r.key] })).sort(
+    (a, b) => b.count - a.count,
   )
-  const conHallazgos = filas.filter((r) => r.conteo > 0).length
-  const mayor = filas[0]
+  const withFindings = rows.filter((r) => r.count > 0).length
+  const largest = rows[0]
 
   return (
     <>
-      <Encabezado
-        acciones={<BotonActualizar mostrarSello={false} />}
-        titulo="Resumen"
-        renglon={`Estado de la migración · consultado el ${fechaHora(generadoEn)}`}
+      <PageHeader
+        actions={<RefreshButton showTimestamp={false} />}
+        title="Resumen"
+        subtitle={`Estado de la migración · consultado el ${dateTime(generatedAt)}`}
       />
 
       <div className="px-4 sm:px-8 pt-6 pb-14">
-        {/* ── Punto focal ─────────────────────────────────────────────── */}
-        <Hoja className="grid sm:grid-cols-[1.1fr_1fr]">
+        {/* ── Focal point ─────────────────────────────────────────────── */}
+        <Sheet className="grid sm:grid-cols-[1.1fr_1fr]">
           <div className="p-5">
-            <Rotulo>Registros vigentes</Rotulo>
+            <Label>Registros vigentes</Label>
             <p
-              data-cifra
-              className="mt-2 font-mono text-portada leading-none font-medium tracking-[-0.015em] text-tinta"
+              data-numeric
+              className="mt-2 font-mono text-display leading-none font-medium tracking-[-0.015em] text-ink"
             >
-              {entero(totalVigentes)}
+              {integer(totalCurrent)}
             </p>
-            <p className="mt-3 max-w-[46ch] text-nota text-tinta-3">
+            <p className="mt-3 max-w-[46ch] text-note text-ink-3">
               Suma de los cinco catálogos sin borrado lógico. Incluye{' '}
-              <Clave className="text-nota">{entero(totalInactivos)}</Clave> inactivos; quedan
-              fuera <Clave className="text-nota">{entero(totalBajas)}</Clave> dados de baja.
+              <KeyText className="text-note">{integer(totalInactive)}</KeyText> inactivos; quedan
+              fuera <KeyText className="text-note">{integer(totalDeleted)}</KeyText> dados de baja.
             </p>
           </div>
 
-          <div className="border-t border-raya p-5 sm:border-t-0 sm:border-l">
+          <div className="border-t border-rule p-5 sm:border-t-0 sm:border-l">
             <div className="flex items-start justify-between gap-3">
-              <Rotulo>Revisiones con hallazgos</Rotulo>
-              <Sello tono={conHallazgos > 0 ? 'aviso' : 'activa'}>
-                {conHallazgos > 0 ? 'Revisar' : 'Limpio'}
-              </Sello>
+              <Label>Revisiones con hallazgos</Label>
+              <Stamp tone={withFindings > 0 ? 'warning' : 'active'}>
+                {withFindings > 0 ? 'Revisar' : 'Limpio'}
+              </Stamp>
             </div>
             <p
-              data-cifra
-              className="mt-2 font-mono text-portada leading-none font-medium tracking-[-0.015em] text-tinta"
+              data-numeric
+              className="mt-2 font-mono text-display leading-none font-medium tracking-[-0.015em] text-ink"
             >
-              {entero(conHallazgos)}
-              <span className="text-seccion text-tinta-4"> / {entero(filas.length)}</span>
+              {integer(withFindings)}
+              <span className="text-section text-ink-4"> / {integer(rows.length)}</span>
             </p>
-            <p className="mt-3 max-w-[46ch] text-nota text-tinta-3">
-              {conHallazgos === 0 || mayor === undefined ? (
+            <p className="mt-3 max-w-[46ch] text-note text-ink-3">
+              {withFindings === 0 || largest === undefined ? (
                 'Ninguna comprobación de integridad encontró registros fuera de lugar.'
               ) : (
                 <>
-                  La mayor es «{mayor.titulo.toLowerCase()}», con{' '}
-                  <Clave className="text-nota">{entero(mayor.conteo)}</Clave> registros. El
+                  La mayor es «{largest.title.toLowerCase()}», con{' '}
+                  <KeyText className="text-note">{integer(largest.count)}</KeyText> registros. El
                   desglose completo está abajo.
                 </>
               )}
             </p>
           </div>
-        </Hoja>
+        </Sheet>
 
-        {/* ── Catálogos ───────────────────────────────────────────────── */}
-        <Bloque rotulo="Catálogos">
+        {/* ── Catalogs ────────────────────────────────────────────────── */}
+        <Block label="Catálogos">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-            {CATALOGOS.map((c) => {
-              const conteo = catalogos[c.clave]
+            {CATALOGS.map((c) => {
+              const count = catalogs[c.key]
               return (
-                <Hoja
-                  key={c.clave}
+                <Sheet
+                  key={c.key}
                   className={cn(
                     'group relative p-4 transition-colors duration-100',
-                    'hover:border-raya-firme hover:bg-renglon/45',
-                    'has-focus-visible:border-raya-firme has-focus-visible:bg-renglon',
+                    'hover:border-rule-strong hover:bg-row/45',
+                    'has-focus-visible:border-rule-strong has-focus-visible:bg-row',
                   )}
                 >
-                  <EnlaceDeFila
-                    to={c.a}
-                    search={c.busqueda}
-                    className="absolute inset-0 rounded-hoja"
+                  <RowLink
+                    to={c.to}
+                    search={c.search}
+                    className="absolute inset-0 rounded-sheet"
                   >
-                    <span className="sr-only">Ver el catálogo de {c.rotulo.toLowerCase()}</span>
-                  </EnlaceDeFila>
+                    <span className="sr-only">Ver el catálogo de {c.label.toLowerCase()}</span>
+                  </RowLink>
 
                   <ArrowUpRight
                     size={13}
                     strokeWidth={1.75}
                     aria-hidden
                     className={cn(
-                      'absolute top-4 right-4 text-tinta-4 opacity-0',
+                      'absolute top-4 right-4 text-ink-4 opacity-0',
                       'transition-[opacity,transform] duration-150',
                       'group-hover:translate-x-px group-hover:opacity-100',
                     )}
                   />
 
-                  <Cifra rotulo={c.rotulo} valor={entero(conteo.vigentes)} />
+                  <Stat label={c.label} value={integer(count.current)} />
 
                   <div className="mt-3.5 flex flex-col items-start gap-1">
-                    <Desglose
-                      conteo={conteo.inactivos}
-                      etiqueta={c.inactivos}
-                      a={c.a}
-                      busqueda={{ ...c.busqueda, estatus: ['inactiva'] }}
+                    <Breakdown
+                      count={count.inactive}
+                      label={c.inactive}
+                      to={c.to}
+                      search={{ ...c.search, status: ['inactive'] }}
                     />
-                    <Desglose
-                      conteo={conteo.bajas}
-                      etiqueta={c.bajas}
-                      a={c.a}
-                      busqueda={{ ...c.busqueda, bajas: true }}
+                    <Breakdown
+                      count={count.deleted}
+                      label={c.deleted}
+                      to={c.to}
+                      search={{ ...c.search, deleted: true }}
                     />
                   </div>
-                </Hoja>
+                </Sheet>
               )
             })}
           </div>
-        </Bloque>
+        </Block>
 
-        {/* ── Revisiones de integridad ────────────────────────────────── */}
-        <Bloque rotulo="Revisiones de integridad">
-          <Hoja className="overflow-hidden">
-            <Manifiesto etiqueta="Revisiones de integridad de la migración">
-              <Cabecera>
+        {/* ── Integrity checks ────────────────────────────────────────── */}
+        <Block label="Revisiones de integridad">
+          <Sheet className="overflow-hidden">
+            <Manifest label="Revisiones de integridad de la migración">
+              <TableHead>
                 <Th>Revisión</Th>
                 <Th>Catálogo</Th>
-                <Th numerica>Encontrados</Th>
+                <Th numeric>Encontrados</Th>
                 <Th>Estado</Th>
-              </Cabecera>
-              <Cuerpo>
-                {filas.map((r) => {
-                  const hallazgo = r.conteo > 0
+              </TableHead>
+              <TableBody>
+                {rows.map((r) => {
+                  const finding = r.count > 0
                   return (
-                    <Fila key={r.clave}>
+                    <TableRow key={r.key}>
                       <Td>
                         <span
                           className={cn(
-                            'block text-lectura',
-                            hallazgo ? 'font-medium text-tinta' : 'text-tinta-2',
+                            'block text-body',
+                            finding ? 'font-medium text-ink' : 'text-ink-2',
                           )}
                         >
-                          {r.titulo}
+                          {r.title}
                         </span>
-                        {/* El tope de medida va en el bloque interior, no en la celda:
-                            una celda con max-width no acota la columna. */}
-                        <span className="mt-0.5 block max-w-[68ch] text-nota text-tinta-3">
-                          {r.explicacion}
-                        </span>
-                      </Td>
-                      <Td>
-                        <Vinculo to={r.a} search={r.busqueda} className="text-dato text-tinta-2">
-                          {r.catalogo}
-                        </Vinculo>
-                      </Td>
-                      <Td numerica>
-                        <span className={hallazgo ? 'font-medium text-tinta' : 'text-tinta-4'}>
-                          {entero(r.conteo)}
+                        {/* The measure cap goes on the inner block, not on the cell:
+                            a cell with max-width does not constrain the column. */}
+                        <span className="mt-0.5 block max-w-[68ch] text-note text-ink-3">
+                          {r.explanation}
                         </span>
                       </Td>
                       <Td>
-                        <Sello tono={hallazgo ? 'aviso' : 'activa'}>
-                          {hallazgo ? 'Revisar' : 'Limpio'}
-                        </Sello>
+                        <TextLink to={r.to} search={r.search} className="text-data text-ink-2">
+                          {r.catalog}
+                        </TextLink>
                       </Td>
-                    </Fila>
+                      <Td numeric>
+                        <span className={finding ? 'font-medium text-ink' : 'text-ink-4'}>
+                          {integer(r.count)}
+                        </span>
+                      </Td>
+                      <Td>
+                        <Stamp tone={finding ? 'warning' : 'active'}>
+                          {finding ? 'Revisar' : 'Limpio'}
+                        </Stamp>
+                      </Td>
+                    </TableRow>
                   )
                 })}
-              </Cuerpo>
-            </Manifiesto>
-          </Hoja>
-        </Bloque>
+              </TableBody>
+            </Manifest>
+          </Sheet>
+        </Block>
 
-        {/* ── Sincronización HCM ──────────────────────────────────────── */}
-        <Bloque rotulo="Sincronización HCM">
-          <Hoja className="overflow-hidden">
-            <Manifiesto etiqueta="Origen de los registros según la sincronización HCM">
-              <Cabecera>
+        {/* ── HCM sync ────────────────────────────────────────────────── */}
+        <Block label="Sincronización HCM">
+          <Sheet className="overflow-hidden">
+            <Manifest label="Origen de los registros según la sincronización HCM">
+              <TableHead>
                 <Th>Catálogo</Th>
-                <Th numerica>Gestionados por HCM</Th>
-                <Th numerica>Capturados a mano</Th>
-                <Th numerica>Marcados como desactivados</Th>
-              </Cabecera>
-              <Cuerpo>
-                {FILAS_HCM.map((f) => {
-                  const conteo = hcm[f.clave]
+                <Th numeric>Gestionados por HCM</Th>
+                <Th numeric>Capturados a mano</Th>
+                <Th numeric>Marcados como desactivados</Th>
+              </TableHead>
+              <TableBody>
+                {HCM_ROWS.map((f) => {
+                  const count = hcm[f.key]
                   return (
-                    <Fila key={f.clave}>
+                    <TableRow key={f.key}>
                       <Td>
-                        <Vinculo to={f.a} className="text-lectura text-tinta">
-                          {f.rotulo}
-                        </Vinculo>
+                        <TextLink to={f.to} className="text-body text-ink">
+                          {f.label}
+                        </TextLink>
                       </Td>
-                      <Td numerica>
-                        <CifraHcm
-                          conteo={conteo.gestionados}
-                          a={f.filtrable ? f.a : undefined}
-                          busqueda={{ origen: ['hcm'] }}
-                          titulo={`${f.rotulo} con hcmLastSeenRunId`}
+                      <Td numeric>
+                        <HcmStat
+                          count={count.managed}
+                          to={f.filterable ? f.to : undefined}
+                          search={{ source: ['hcm'] }}
+                          title={`${f.label} con hcmLastSeenRunId`}
                         />
                       </Td>
-                      <Td numerica>
-                        <CifraHcm
-                          conteo={conteo.manuales}
-                          a={f.filtrable ? f.a : undefined}
-                          busqueda={{ origen: ['manual'] }}
-                          titulo={`${f.rotulo} sin hcmLastSeenRunId`}
+                      <Td numeric>
+                        <HcmStat
+                          count={count.manual}
+                          to={f.filterable ? f.to : undefined}
+                          search={{ source: ['manual'] }}
+                          title={`${f.label} sin hcmLastSeenRunId`}
                         />
                       </Td>
-                      <Td numerica>
+                      <Td numeric>
                         <span
-                          title={`${f.rotulo} con hcmDisabled`}
-                          className={conteo.desactivados > 0 ? 'text-ambar' : 'text-tinta-4'}
+                          title={`${f.label} con hcmDisabled`}
+                          className={count.disabled > 0 ? 'text-amber' : 'text-ink-4'}
                         >
-                          {entero(conteo.desactivados)}
+                          {integer(count.disabled)}
                         </span>
                       </Td>
-                    </Fila>
+                    </TableRow>
                   )
                 })}
-              </Cuerpo>
-            </Manifiesto>
-          </Hoja>
-          <p className="mt-3 max-w-[78ch] text-nota text-tinta-3">
+              </TableBody>
+            </Manifest>
+          </Sheet>
+          <p className="mt-3 max-w-[78ch] text-note text-ink-3">
             Informativo: estas marcas no cambian el comportamiento del sistema. Un registro
-            gestionado por HCM es el que trae <Clave className="text-nota">hcmLastSeenRunId</Clave>{' '}
+            gestionado por HCM es el que trae <KeyText className="text-note">hcmLastSeenRunId</KeyText>{' '}
             —lo trajo alguna corrida del sincronizador—; los capturados a mano nunca se marcan. La
             última columna cuenta los que el sincronizador marcó con{' '}
-            <Clave className="text-nota">hcmDisabled</Clave> porque GER dejó de reportarlos.
+            <KeyText className="text-note">hcmDisabled</KeyText> porque GER dejó de reportarlos.
           </p>
-        </Bloque>
+        </Block>
       </div>
     </>
   )
 }
 
-/* ── Desglose de una tarjeta ──────────────────────────────────────────────
-   En cero no enlaza: se retira a la tinta más callada y deja de ser un
-   destino. Lo que vale cero no merece un clic.                             */
-function Desglose({
-  conteo,
-  etiqueta,
-  a,
-  busqueda,
+/* ── Card breakdown ───────────────────────────────────────────────────────
+   At zero it does not link: it retreats to the quietest ink and stops being
+   a destination. What is worth zero does not deserve a click.              */
+function Breakdown({
+  count,
+  label,
+  to,
+  search,
 }: {
-  conteo: number
-  etiqueta: string
-  a: LinkProps['to']
-  busqueda?: Record<string, unknown>
+  count: number
+  label: string
+  to: LinkProps['to']
+  search?: Record<string, unknown>
 }) {
-  if (conteo === 0) {
+  if (count === 0) {
     return (
-      <span className="text-nota text-tinta-4">
-        <Clave className="text-nota text-tinta-4">{entero(conteo)}</Clave> {etiqueta}
+      <span className="text-note text-ink-4">
+        <KeyText className="text-note text-ink-4">{integer(count)}</KeyText> {label}
       </span>
     )
   }
 
   return (
-    <Vinculo to={a} search={busqueda} className="relative z-10 text-nota text-tinta-2">
-      <Clave className="text-nota">{entero(conteo)}</Clave> {etiqueta}
-    </Vinculo>
+    <TextLink to={to} search={search} className="relative z-10 text-note text-ink-2">
+      <KeyText className="text-note">{integer(count)}</KeyText> {label}
+    </TextLink>
   )
 }
 
-/** Cifra de la tabla HCM: enlaza sólo cuando el listado sabe filtrar por origen. */
-function CifraHcm({
-  conteo,
-  a,
-  busqueda,
-  titulo,
+/** Stat in the HCM table: links only when the listing knows how to filter by source. */
+function HcmStat({
+  count,
+  to,
+  search,
+  title,
 }: {
-  conteo: number
-  a?: LinkProps['to']
-  busqueda?: Record<string, unknown>
-  titulo: string
+  count: number
+  to?: LinkProps['to']
+  search?: Record<string, unknown>
+  title: string
 }) {
-  if (a === undefined || conteo === 0) {
+  if (to === undefined || count === 0) {
     return (
-      <span title={titulo} className={conteo === 0 ? 'text-tinta-4' : 'text-tinta'}>
-        {entero(conteo)}
+      <span title={title} className={count === 0 ? 'text-ink-4' : 'text-ink'}>
+        {integer(count)}
       </span>
     )
   }
 
   return (
-    <Vinculo to={a} search={busqueda} className="text-tinta">
-      <span title={titulo}>{entero(conteo)}</span>
-    </Vinculo>
+    <TextLink to={to} search={search} className="text-ink">
+      <span title={title}>{integer(count)}</span>
+    </TextLink>
   )
 }

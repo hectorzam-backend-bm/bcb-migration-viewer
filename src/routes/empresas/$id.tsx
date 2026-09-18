@@ -1,136 +1,136 @@
 import { createFileRoute, notFound } from '@tanstack/react-router'
-import { Cifra, Clave, Dato, Hoja, Regla, Sello, SelloActividad } from '~/components/base'
-import { Encabezado, Miga, Migas, SeparadorMiga } from '~/components/cascaron'
-import { Barra, EstadoError, EstadoVacio } from '~/components/estados'
-import { Ficha, Rejilla, Vinculo } from '~/components/ficha'
-import { BotonActualizar } from '~/components/actualizar'
+import { Stat, KeyText, Field, Sheet, Rule, Stamp, ActivityStamp } from '~/components/base'
+import { PageHeader, Breadcrumb, Breadcrumbs, BreadcrumbSeparator } from '~/components/shell'
+import { SkeletonBar, ErrorState, EmptyState } from '~/components/states'
+import { Card, Grid, TextLink } from '~/components/card'
+import { RefreshButton } from '~/components/refresh'
 import {
-  Cabecera,
-  Cuerpo,
-  EnlaceDeFila,
-  Fila,
-  Manifiesto,
+  TableHead,
+  TableBody,
+  RowLink,
+  TableRow,
+  Manifest,
   Td,
   Th,
-} from '~/components/tabla'
-import { SIN_DATO, entero, fechaHora, plural } from '~/lib/formato'
-import { obtenerEmpresa } from '~/server/empresas'
+} from '~/components/table'
+import { NO_DATA, integer, dateTime, plural } from '~/lib/format'
+import { getCompany } from '~/server/companies'
 
 /* ───────────────────────────────────────────────────────────────────────────
-   Ficha de empresa. El detalle vale por lo que enlaza: cada servicio lleva
-   al suyo, y el bloque de alcance dice cuánto catálogo cuelga de aquí.
+   Company card. The detail is worth what it links to: every service leads
+   to its own, and the scope block says how much catalog hangs off here.
    ─────────────────────────────────────────────────────────────────────────── */
 
 export const Route = createFileRoute('/empresas/$id')({
   loader: async ({ params }) => {
-    const resultado = await obtenerEmpresa({ data: { id: params.id } })
-    if (resultado.ok && resultado.empresa === null) throw notFound()
-    return resultado
+    const result = await getCompany({ data: { id: params.id } })
+    if (result.ok && result.company === null) throw notFound()
+    return result
   },
-  component: Pantalla,
-  pendingComponent: FichaCargando,
+  component: Screen,
+  pendingComponent: CardSkeleton,
   notFoundComponent: () => (
     <>
-      <Encabezado
-        titulo="Empresa no encontrada"
-        migas={
-          <Migas>
-            <Miga to="/empresas">Empresas</Miga>
-            <SeparadorMiga />
-            <span className="text-tinta-4">?</span>
-          </Migas>
+      <PageHeader
+        title="Empresa no encontrada"
+        breadcrumbs={
+          <Breadcrumbs>
+            <Breadcrumb to="/empresas">Empresas</Breadcrumb>
+            <BreadcrumbSeparator />
+            <span className="text-ink-4">?</span>
+          </Breadcrumbs>
         }
       />
-      <EstadoVacio
-        titulo="No existe una empresa con ese identificador"
-        detalle="El registro pudo borrarse de la base o la dirección está mal copiada. Vuelve al catálogo para buscarla por clave."
+      <EmptyState
+        title="No existe una empresa con ese identificador"
+        detail="El registro pudo borrarse de la base o la dirección está mal copiada. Vuelve al catálogo para buscarla por clave."
       />
     </>
   ),
   errorComponent: ({ error, reset }) => (
-    <EstadoError
-      titulo="No fue posible leer la ficha de la empresa"
-      detalle={error instanceof Error ? error.message : String(error)}
-      alReintentar={reset}
+    <ErrorState
+      title="No fue posible leer la ficha de la empresa"
+      detail={error instanceof Error ? error.message : String(error)}
+      onRetry={reset}
     />
   ),
 })
 
-function FichaCargando() {
+function CardSkeleton() {
   return (
     <div role="status" aria-live="polite" aria-busy="true" className="px-4 sm:px-8 pt-7">
       <span className="sr-only">Cargando la ficha de la empresa…</span>
-      <Barra className="h-[22px] w-64" />
-      <Regla doble className="mt-5" />
+      <SkeletonBar className="h-[22px] w-64" />
+      <Rule double className="mt-5" />
       <div className="mt-6 grid gap-5 lg:grid-cols-3">
-        <Hoja className="p-5 lg:col-span-2">
+        <Sheet className="p-5 lg:col-span-2">
           <div className="grid gap-5 sm:grid-cols-2">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} style={{ opacity: 1 - i * 0.1 }}>
-                <Barra className="h-[8px] w-20" />
-                <Barra className="mt-2 w-40" />
+                <SkeletonBar className="h-[8px] w-20" />
+                <SkeletonBar className="mt-2 w-40" />
               </div>
             ))}
           </div>
-        </Hoja>
-        <Hoja className="p-5">
+        </Sheet>
+        <Sheet className="p-5">
           <div className="grid gap-5">
             {Array.from({ length: 3 }).map((_, i) => (
               <div key={i} style={{ opacity: 1 - i * 0.15 }}>
-                <Barra className="h-[8px] w-24" />
-                <Barra className="mt-2 h-[20px] w-16" />
+                <SkeletonBar className="h-[8px] w-24" />
+                <SkeletonBar className="mt-2 h-[20px] w-16" />
               </div>
             ))}
           </div>
-        </Hoja>
+        </Sheet>
       </div>
     </div>
   )
 }
 
-function Pantalla() {
-  const resultado = Route.useLoaderData()
+function Screen() {
+  const result = Route.useLoaderData()
 
-  if (!resultado.ok) {
+  if (!result.ok) {
     return (
       <>
-        <Encabezado titulo="Empresa" renglon={SIN_DATO} />
-        <EstadoError {...resultado.falla} />
+        <PageHeader title="Empresa" subtitle={NO_DATA} />
+        <ErrorState {...result.failure} />
       </>
     )
   }
 
-  const empresa = resultado.empresa
-  if (!empresa) return null
+  const company = result.company
+  if (!company) return null
 
-  const serviciosDeBaja = empresa.servicios.filter((s) => s.eliminada).length
+  const deletedServices = company.services.filter((s) => s.isDeleted).length
 
   return (
     <>
-      <Encabezado
-        acciones={<BotonActualizar />}
-        titulo={empresa.nombreComercial}
-        migas={
-          <Migas>
-            <Miga to="/empresas">Empresas</Miga>
-            <SeparadorMiga />
-            <span className="text-tinta-2">{empresa.clave}</span>
-          </Migas>
+      <PageHeader
+        actions={<RefreshButton />}
+        title={company.tradeName}
+        breadcrumbs={
+          <Breadcrumbs>
+            <Breadcrumb to="/empresas">Empresas</Breadcrumb>
+            <BreadcrumbSeparator />
+            <span className="text-ink-2">{company.key}</span>
+          </Breadcrumbs>
         }
-        renglon={
+        subtitle={
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <Clave enfasis>{empresa.clave}</Clave>
-            <span aria-hidden className="text-tinta-4">
+            <KeyText emphasis>{company.key}</KeyText>
+            <span aria-hidden className="text-ink-4">
               ·
             </span>
-            <SelloActividad activa={empresa.activa} eliminada={empresa.eliminada} />
-            {empresa.hcmDesactivada ? (
-              <Sello
-                tono="aviso"
-                titulo="HCM la reportó ausente o con estatus N. Es meramente informativo: no afecta el funcionamiento del sistema."
+            <ActivityStamp active={company.isActive} deleted={company.isDeleted} />
+            {company.hcmDisabled ? (
+              <Stamp
+                tone="warning"
+                title="HCM la reportó ausente o con estatus N. Es meramente informativo: no afecta el funcionamiento del sistema."
               >
                 HCM
-              </Sello>
+              </Stamp>
             ) : null}
           </span>
         }
@@ -138,168 +138,168 @@ function Pantalla() {
 
       <div className="px-4 sm:px-8 py-6">
         <div className="grid gap-5 lg:grid-cols-3">
-          <Ficha titulo="Identificación" className="lg:col-span-2">
-            <Rejilla columnas={2}>
-              <Dato rotulo="Clave" mono>
-                {empresa.clave || SIN_DATO}
-              </Dato>
-              <Dato rotulo="Nombre corto">{empresa.nombreCorto || SIN_DATO}</Dato>
-              <Dato rotulo="Nombre comercial">
-                {empresa.nombreComercial || SIN_DATO}
-              </Dato>
-              <Dato rotulo="Razón social">{empresa.razonSocial || SIN_DATO}</Dato>
-              <Dato rotulo="Estatus">
-                <SelloActividad
-                  activa={empresa.activa}
-                  eliminada={empresa.eliminada}
+          <Card title="Identificación" className="lg:col-span-2">
+            <Grid columns={2}>
+              <Field label="Clave" mono>
+                {company.key || NO_DATA}
+              </Field>
+              <Field label="Nombre corto">{company.shortName || NO_DATA}</Field>
+              <Field label="Nombre comercial">
+                {company.tradeName || NO_DATA}
+              </Field>
+              <Field label="Razón social">{company.legalName || NO_DATA}</Field>
+              <Field label="Estatus">
+                <ActivityStamp
+                  active={company.isActive}
+                  deleted={company.isDeleted}
                 />
-              </Dato>
-              <Dato rotulo="Identificador" mono>
-                <span className="break-all text-tinta-3">{empresa.id}</span>
-              </Dato>
-            </Rejilla>
-          </Ficha>
+              </Field>
+              <Field label="Identificador" mono>
+                <span className="break-all text-ink-3">{company.id}</span>
+              </Field>
+            </Grid>
+          </Card>
 
-          <Ficha titulo="Alcance" nota="registros vigentes">
+          <Card title="Alcance" note="registros vigentes">
             <div className="grid gap-5 sm:grid-cols-3 lg:grid-cols-1">
-              <Cifra
-                rotulo="Servicios"
-                valor={entero(empresa.alcance.servicios)}
-                nota={
-                  serviciosDeBaja > 0
-                    ? `${plural(serviciosDeBaja, 'servicio dado de baja', 'servicios dados de baja')}, fuera del conteo`
+              <Stat
+                label="Servicios"
+                value={integer(company.scope.services)}
+                note={
+                  deletedServices > 0
+                    ? `${plural(deletedServices, 'servicio dado de baja', 'servicios dados de baja')}, fuera del conteo`
                     : 'Servicios sin borrado lógico'
                 }
               />
-              <Cifra
-                rotulo="Terminales alcanzadas"
-                valor={entero(empresa.alcance.terminales)}
-                nota="Distintas, a través de sus servicios"
+              <Stat
+                label="Terminales alcanzadas"
+                value={integer(company.scope.stations)}
+                note="Distintas, a través de sus servicios"
               />
-              <Cifra
-                rotulo="Rutas"
-                valor={entero(empresa.alcance.rutas)}
-                nota="De todos sus servicios vigentes"
+              <Stat
+                label="Rutas"
+                value={integer(company.scope.routes)}
+                note="De todos sus servicios vigentes"
               />
             </div>
-          </Ficha>
+          </Card>
         </div>
 
         <div className="mt-5 grid items-start gap-5 lg:grid-cols-2">
-          <Ficha titulo="Sincronización HCM">
-            <Rejilla columnas={2}>
-              <Dato rotulo="Marca de ausencia">
-                {empresa.hcmDesactivada ? (
-                  <Sello tono="aviso">Reportada ausente</Sello>
+          <Card title="Sincronización HCM">
+            <Grid columns={2}>
+              <Field label="Marca de ausencia">
+                {company.hcmDisabled ? (
+                  <Stamp tone="warning">Reportada ausente</Stamp>
                 ) : (
-                  <span className="text-tinta-2">Sin marca</span>
+                  <span className="text-ink-2">Sin marca</span>
                 )}
-              </Dato>
-              <Dato rotulo="Origen del registro">
-                <span className="text-tinta-2">
-                  {empresa.sincronizadaPorHcm
+              </Field>
+              <Field label="Origen del registro">
+                <span className="text-ink-2">
+                  {company.syncedByHcm
                     ? 'Sincronizada por HCM'
                     : 'Creada a mano'}
                 </span>
-              </Dato>
-              <Dato rotulo="Última corrida que la trajo" mono ancho>
-                {empresa.hcmRunId ? (
-                  <span className="break-all">{empresa.hcmRunId}</span>
+              </Field>
+              <Field label="Última corrida que la trajo" mono wide>
+                {company.hcmRunId ? (
+                  <span className="break-all">{company.hcmRunId}</span>
                 ) : (
-                  <span className="text-tinta-4">{SIN_DATO}</span>
+                  <span className="text-ink-4">{NO_DATA}</span>
                 )}
-              </Dato>
-            </Rejilla>
-            <Regla className="my-4" />
-            <p className="text-dato leading-relaxed text-tinta-3">
+              </Field>
+            </Grid>
+            <Rule className="my-4" />
+            <p className="text-data leading-relaxed text-ink-3">
               Estos dos campos son <strong className="font-medium">meramente
               informativos</strong> y no alteran el funcionamiento del sistema. Los
               escribe únicamente la sincronización con HCM, nunca el CRUD: una
               empresa sin corrida registrada se capturó a mano y jamás debe
               marcarse como ausente.
             </p>
-          </Ficha>
+          </Card>
 
-          <Ficha titulo="Rastro">
-            <Rejilla columnas={2}>
-              <Dato rotulo="Creado" mono>
-                {fechaHora(empresa.creadoEn)}
-              </Dato>
-              <Dato rotulo="Creado por">
-                {empresa.creadoPor ?? (
-                  <span className="text-tinta-4">{SIN_DATO}</span>
+          <Card title="Rastro">
+            <Grid columns={2}>
+              <Field label="Creado" mono>
+                {dateTime(company.createdAt)}
+              </Field>
+              <Field label="Creado por">
+                {company.createdBy ?? (
+                  <span className="text-ink-4">{NO_DATA}</span>
                 )}
-              </Dato>
-              <Dato rotulo="Última actualización" mono>
-                {fechaHora(empresa.actualizadoEn)}
-              </Dato>
-              <Dato rotulo="Actualizado por">
-                {empresa.actualizadoPor ?? (
-                  <span className="text-tinta-4">{SIN_DATO}</span>
+              </Field>
+              <Field label="Última actualización" mono>
+                {dateTime(company.updatedAt)}
+              </Field>
+              <Field label="Actualizado por">
+                {company.updatedBy ?? (
+                  <span className="text-ink-4">{NO_DATA}</span>
                 )}
-              </Dato>
-              {empresa.eliminadoEn ? (
-                <Dato rotulo="Dada de baja" mono ancho>
-                  <span className="text-oxido">{fechaHora(empresa.eliminadoEn)}</span>
-                </Dato>
+              </Field>
+              {company.deletedAt ? (
+                <Field label="Dada de baja" mono wide>
+                  <span className="text-rust">{dateTime(company.deletedAt)}</span>
+                </Field>
               ) : null}
-            </Rejilla>
-          </Ficha>
+            </Grid>
+          </Card>
         </div>
 
-        <Ficha
-          titulo="Servicios"
-          nota={plural(empresa.servicios.length, 'servicio', 'servicios')}
+        <Card
+          title="Servicios"
+          note={plural(company.services.length, 'servicio', 'servicios')}
           className="mt-5"
         >
           <div className="-m-5">
-            {empresa.servicios.length === 0 ? (
-              <EstadoVacio
-                titulo="Esta empresa migró sin servicios asociados"
-                detalle="No hay ningún registro de Service que apunte a esta empresa. En el sistema anterior la empresa existía, pero ningún servicio quedó ligado a ella."
+            {company.services.length === 0 ? (
+              <EmptyState
+                title="Esta empresa migró sin servicios asociados"
+                detail="No hay ningún registro de Service que apunte a esta empresa. En el sistema anterior la empresa existía, pero ningún servicio quedó ligado a ella."
               />
             ) : (
-              <Manifiesto etiqueta={`Servicios de ${empresa.nombreComercial}`}>
-                <Cabecera>
+              <Manifest label={`Servicios de ${company.tradeName}`}>
+                <TableHead>
                   <Th>Clave</Th>
                   <Th>Número</Th>
                   <Th>Nombre</Th>
                   <Th>Estatus</Th>
-                </Cabecera>
-                <Cuerpo>
-                  {empresa.servicios.map((servicio) => (
-                    <Fila key={servicio.id} atenuada={servicio.eliminada}>
+                </TableHead>
+                <TableBody>
+                  {company.services.map((service) => (
+                    <TableRow key={service.id} dimmed={service.isDeleted}>
                       <Td>
-                        <EnlaceDeFila
+                        <RowLink
                           to="/servicios/$id"
-                          params={{ id: servicio.id }}
+                          params={{ id: service.id }}
                           className="inline-block"
                         >
-                          <Clave enfasis>{servicio.clave}</Clave>
-                        </EnlaceDeFila>
+                          <KeyText emphasis>{service.key}</KeyText>
+                        </RowLink>
                       </Td>
-                      <Td numerica className="text-tinta-2">
-                        {servicio.numero || SIN_DATO}
+                      <Td numeric className="text-ink-2">
+                        {service.number || NO_DATA}
                       </Td>
-                      <Td className="text-tinta">{servicio.nombre || SIN_DATO}</Td>
+                      <Td className="text-ink">{service.name || NO_DATA}</Td>
                       <Td>
-                        <SelloActividad
-                          activa={servicio.activa}
-                          eliminada={servicio.eliminada}
+                        <ActivityStamp
+                          active={service.isActive}
+                          deleted={service.isDeleted}
                         />
                       </Td>
-                    </Fila>
+                    </TableRow>
                   ))}
-                </Cuerpo>
-              </Manifiesto>
+                </TableBody>
+              </Manifest>
             )}
           </div>
-        </Ficha>
+        </Card>
 
-        <p className="mt-5 text-dato text-tinta-3">
-          <Vinculo to="/servicios" search={{ empresa: [empresa.id] }}>
+        <p className="mt-5 text-data text-ink-3">
+          <TextLink to="/servicios" search={{ company: [company.id] }}>
             Ver estos servicios en el catálogo completo
-          </Vinculo>
+          </TextLink>
         </p>
       </div>
     </>

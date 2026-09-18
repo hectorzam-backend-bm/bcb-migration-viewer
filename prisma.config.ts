@@ -2,12 +2,12 @@ import 'dotenv/config'
 import { defineConfig } from 'prisma/config'
 
 /**
- * Prisma 7 ya no lee .env por su cuenta ni toma la url del bloque `datasource`
- * del schema: la configuración del CLI vive aquí.
+ * Prisma 7 no longer reads .env on its own, nor does it take the url from the
+ * schema's `datasource` block: the CLI configuration lives here.
  *
- * El schema se deja tal como viene del backend (prisma/schema.prisma) para poder
- * reemplazarlo sin editarlo; lo único que cambia respecto al original es
- * `moduleFormat = "esm"`, que necesita Vite.
+ * The schema is left exactly as it comes from the backend (prisma/schema.prisma) so
+ * it can be replaced without editing it; the only change from the original is
+ * `moduleFormat = "esm"`, which Vite needs.
  */
 export default defineConfig({
   schema: './prisma/schema.prisma',

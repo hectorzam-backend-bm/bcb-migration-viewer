@@ -1,341 +1,340 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Clave, Hoja, Marca, SelloActividad } from '~/components/base'
-import { Encabezado } from '~/components/cascaron'
-import { EstadoError, EstadoVacio, ManifiestoCargando } from '~/components/estados'
-import { Pestana, Pestanas, Vinculo } from '~/components/ficha'
-import type { Opcion } from '~/components/filtros'
-import { BarraDeFiltros, Buscador, FiltroLista } from '~/components/filtros'
-import { BotonActualizar } from '~/components/actualizar'
+import { KeyText, Sheet, MainMark, ActivityStamp } from '~/components/base'
+import { PageHeader } from '~/components/shell'
+import { ErrorState, EmptyState, ManifestSkeleton } from '~/components/states'
+import { Tab, Tabs, TextLink } from '~/components/card'
+import type { Option } from '~/components/filters'
+import { FilterBar, SearchBox, ListFilter } from '~/components/filters'
+import { RefreshButton } from '~/components/refresh'
 import {
-  Cabecera,
-  Cuerpo,
-  EnlaceDeFila,
-  Fila,
-  Manifiesto,
-  Paginacion,
+  TableHead,
+  TableBody,
+  RowLink,
+  TableRow,
+  Manifest,
+  Pagination,
   Td,
   Th,
-  ThOrden,
-} from '~/components/tabla'
+  SortableTh,
+} from '~/components/table'
 import { cn } from '~/lib/cn'
 import {
-  SIN_DATO,
-  TIPO_RECAUDACION,
-  entero,
-  kilometros,
-  minutos,
-  moneda,
-} from '~/lib/formato'
+  NO_DATA,
+  COLLECTION_TYPE_LABELS,
+  integer,
+  kilometers,
+  minutes,
+  currency,
+} from '~/lib/format'
 import {
-  DIRECCIONES,
-  TAMANOS,
-  booleano,
-  limpiarBusqueda,
-  lista,
-  entero as enteroDeUrl,
-  tamanoDePagina,
-  texto,
-  unoDe,
-} from '~/lib/parametros'
-import type { BusquedaRutas, FilaRuta, FilaTramo, Vista } from '~/server/rutas'
-import { listarRutas } from '~/server/rutas'
+  DIRECTIONS,
+  PAGE_SIZES,
+  bool,
+  stripDefaults,
+  list,
+  integerParam,
+  pageSize,
+  text,
+  oneOf,
+} from '~/lib/params'
+import type { RouteSearch, RouteRow, SegmentRow, View } from '~/server/routes'
+import { listRoutes } from '~/server/routes'
 
-const VISTAS = ['rutas', 'tramos'] as const
+const VIEWS = ['routes', 'segments'] as const
 
-const ORDENES = [
-  'numero',
-  'nombre',
-  'servicio',
-  'empresa',
-  'tramos',
-  'tarifa',
-  'tiempo',
-  'distancia',
-  'estatus',
-  'ruta',
-  'origen',
-  'destino',
-  'estancia',
-  'duracion',
-  'tarifaRedonda',
-  'venta',
-  'principal',
+const SORTS = [
+  'number',
+  'name',
+  'service',
+  'company',
+  'segments',
+  'price',
+  'travelTime',
+  'distance',
+  'status',
+  'route',
+  'origin',
+  'destination',
+  'stayTime',
+  'duration',
+  'priceRound',
+  'sale',
+  'main',
 ] as const
 
-function ordenPorOmision(vista: Vista) {
-  return vista === 'tramos' ? 'ruta' : 'numero'
+function defaultSort(view: View) {
+  return view === 'segments' ? 'route' : 'number'
 }
 
-function porOmision(vista: Vista): BusquedaRutas {
+function defaultSearch(view: View): RouteSearch {
   return {
-    vista: 'rutas',
+    view: 'routes',
     q: '',
-    pagina: 1,
-    porPagina: TAMANOS[0],
-    orden: ordenPorOmision(vista),
+    page: 1,
+    perPage: PAGE_SIZES[0],
+    sort: defaultSort(view),
     dir: 'asc',
-    empresa: [],
-    servicio: [],
-    recaudacion: [],
+    company: [],
+    service: [],
+    collection: [],
     iva: [],
-    asientos: [],
-    estatus: [],
-    ruta: [],
-    principal: [],
-    venta: [],
-    bajas: false,
+    seats: [],
+    status: [],
+    route: [],
+    main: [],
+    sale: [],
+    deleted: false,
   }
 }
 
-/** Repone los valores por omisión de la pestaña que no viajan en la URL. */
-function completar(s: Partial<BusquedaRutas>): BusquedaRutas {
-  const vista = s.vista ?? 'rutas'
-  return { ...porOmision(vista), ...s, vista }
+/** Refills the tab's default values that do not travel in the URL. */
+function withDefaults(s: Partial<RouteSearch>): RouteSearch {
+  const view = s.view ?? 'routes'
+  return { ...defaultSearch(view), ...s, view }
 }
 
 export const Route = createFileRoute('/rutas/')({
-  // Sólo viaja en la URL lo que el usuario cambió; `completar` repone el resto.
-  // Los valores por omisión dependen de la pestaña (cada vista ordena distinto),
-  // por eso el recorte se hace contra `porOmision(vista)` y no contra una constante.
-  validateSearch: (entrada: Record<string, unknown>): Partial<BusquedaRutas> => {
-    const vista = unoDe(entrada.vista, VISTAS, 'rutas')
-    const completa: BusquedaRutas = {
-      vista,
-      q: texto(entrada.q),
-      pagina: enteroDeUrl(entrada.pagina, 1, 1),
-      porPagina: tamanoDePagina(entrada.porPagina),
-      orden: unoDe(entrada.orden, ORDENES, ordenPorOmision(vista)),
-      dir: unoDe(entrada.dir, DIRECCIONES, 'asc'),
-      empresa: lista(entrada.empresa),
-      servicio: lista(entrada.servicio),
-      recaudacion: lista(entrada.recaudacion),
-      iva: lista(entrada.iva),
-      asientos: lista(entrada.asientos),
-      estatus: lista(entrada.estatus),
-      ruta: lista(entrada.ruta),
-      principal: lista(entrada.principal),
-      venta: lista(entrada.venta),
-      bajas: booleano(entrada.bajas),
+  // Only what the user changed travels in the URL; `withDefaults` refills the rest.
+  // The default values depend on the tab (each view sorts differently),
+  // so the trim is done against `defaultSearch(view)` and not against a constant.
+  validateSearch: (input: Record<string, unknown>): Partial<RouteSearch> => {
+    const view = oneOf(input.view, VIEWS, 'routes')
+    const full: RouteSearch = {
+      view,
+      q: text(input.q),
+      page: integerParam(input.page, 1, 1),
+      perPage: pageSize(input.perPage),
+      sort: oneOf(input.sort, SORTS, defaultSort(view)),
+      dir: oneOf(input.dir, DIRECTIONS, 'asc'),
+      company: list(input.company),
+      service: list(input.service),
+      collection: list(input.collection),
+      iva: list(input.iva),
+      seats: list(input.seats),
+      status: list(input.status),
+      route: list(input.route),
+      main: list(input.main),
+      sale: list(input.sale),
+      deleted: bool(input.deleted),
     }
-    return limpiarBusqueda(completa, porOmision(vista))
+    return stripDefaults(full, defaultSearch(view))
   },
-  loaderDeps: ({ search }) => completar(search),
-  loader: ({ deps }) => listarRutas({ data: deps }),
-  component: Pantalla,
+  loaderDeps: ({ search }) => withDefaults(search),
+  loader: ({ deps }) => listRoutes({ data: deps }),
+  component: Screen,
   pendingComponent: () => (
     <>
-      <Encabezado titulo="Rutas y tramos" renglon="Cargando…" />
+      <PageHeader title="Rutas y tramos" subtitle="Cargando…" />
       <div className="px-4 sm:px-8 py-6">
-        <Hoja className="py-2">
-          <ManifiestoCargando columnas={[6, 20, 10, 10, 18, 6, 10, 8]} />
-        </Hoja>
+        <Sheet className="py-2">
+          <ManifestSkeleton columns={[6, 20, 10, 10, 18, 6, 10, 8]} />
+        </Sheet>
       </div>
     </>
   ),
   errorComponent: ({ error, reset }) => (
-    <EstadoError
-      titulo="No fue posible leer las rutas"
-      detalle={error instanceof Error ? error.message : String(error)}
-      alReintentar={reset}
+    <ErrorState
+      title="No fue posible leer las rutas"
+      detail={error instanceof Error ? error.message : String(error)}
+      onRetry={reset}
     />
   ),
 })
 
-/* ── Controles ──────────────────────────────────────────────────────────── */
+/* ── Controls ───────────────────────────────────────────────────────────── */
 
-const SI_NO: Array<Opcion> = [
-  { valor: 'si', etiqueta: 'Sí' },
-  { valor: 'no', etiqueta: 'No' },
+const YES_NO: Array<Option> = [
+  { value: 'yes', label: 'Sí' },
+  { value: 'no', label: 'No' },
 ]
 
-const ESTATUS: Array<Opcion> = [
-  { valor: 'activa', etiqueta: 'Activa' },
-  { valor: 'inactiva', etiqueta: 'Inactiva' },
+const STATUS: Array<Option> = [
+  { value: 'active', label: 'Activa' },
+  { value: 'inactive', label: 'Inactiva' },
 ]
 
-const RECAUDACION: Array<Opcion> = Object.entries(TIPO_RECAUDACION).map(
-  ([valor, etiqueta]) => ({ valor, etiqueta }),
+const COLLECTION: Array<Option> = Object.entries(COLLECTION_TYPE_LABELS).map(
+  ([value, label]) => ({ value, label }),
 )
 
 /**
- * Filtro de una sola pieza: no es un interruptor de datos, es un modificador de
- * la consulta. Se dibuja como las demás pastillas de la barra para que la zona
- * de control lea como una sola familia.
+ * One-piece filter: not a data switch, a query modifier. It is drawn like the
+ * other pills in the bar so the control area reads as a single family.
  */
-function Alternador({
-  nombre,
-  encendido,
-  alCambiar,
-  titulo,
+function Toggle({
+  name,
+  on,
+  onChange,
+  title,
 }: {
-  nombre: string
-  encendido: boolean
-  alCambiar: (encendido: boolean) => void
-  titulo?: string
+  name: string
+  on: boolean
+  onChange: (on: boolean) => void
+  title?: string
 }) {
   return (
     <button
       type="button"
-      aria-pressed={encendido}
-      title={titulo}
-      onClick={() => alCambiar(!encendido)}
+      aria-pressed={on}
+      title={title}
+      onClick={() => onChange(!on)}
       className={cn(
-        'inline-flex h-9 items-center gap-2 rounded-chip border px-3 text-lectura',
+        'inline-flex h-9 items-center gap-2 rounded-chip border px-3 text-body',
         'transition-[colors,transform] duration-100 active:scale-[0.98]',
-        encendido
-          ? 'border-sello/40 bg-sello-lavado font-medium text-tinta'
-          : 'border-raya border-dashed bg-transparent text-tinta-2 hover:border-raya-firme hover:border-solid hover:bg-renglon',
+        on
+          ? 'border-stamp/40 bg-stamp-wash font-medium text-ink'
+          : 'border-rule border-dashed bg-transparent text-ink-2 hover:border-rule-strong hover:border-solid hover:bg-row',
       )}
     >
-      {nombre}
+      {name}
     </button>
   )
 }
 
-/** Par de terminales con la flecha del manifiesto entre ellas. */
-function Trayecto({
-  origen,
-  destino,
+/** A pair of stations with the manifest arrow between them. */
+function StationPair({
+  origin,
+  destination,
 }: {
-  origen: { id: string; clave: string; nombre: string }
-  destino: { id: string; clave: string; nombre: string }
+  origin: { id: string; key: string; name: string }
+  destination: { id: string; key: string; name: string }
 }) {
   return (
     <span
       className="inline-flex items-center gap-1.5 whitespace-nowrap"
-      title={`${origen.nombre} → ${destino.nombre}`}
+      title={`${origin.name} → ${destination.name}`}
     >
-      <Vinculo to="/terminales/$id" params={{ id: origen.id }} className="relative">
-        <Clave>{origen.clave}</Clave>
-      </Vinculo>
-      <span aria-hidden className="text-tinta-4">
+      <TextLink to="/terminales/$id" params={{ id: origin.id }} className="relative">
+        <KeyText>{origin.key}</KeyText>
+      </TextLink>
+      <span aria-hidden className="text-ink-4">
         →
       </span>
-      <Vinculo to="/terminales/$id" params={{ id: destino.id }} className="relative">
-        <Clave>{destino.clave}</Clave>
-      </Vinculo>
+      <TextLink to="/terminales/$id" params={{ id: destination.id }} className="relative">
+        <KeyText>{destination.key}</KeyText>
+      </TextLink>
     </span>
   )
 }
 
-function Si({ valor }: { valor: boolean }) {
+function YesNo({ value }: { value: boolean }) {
   return (
-    <span className={cn('font-mono text-dato', valor ? 'text-tinta-2' : 'text-tinta-4')}>
-      {valor ? 'Sí' : 'No'}
+    <span className={cn('font-mono text-data', value ? 'text-ink-2' : 'text-ink-4')}>
+      {value ? 'Sí' : 'No'}
     </span>
   )
 }
 
-/* ── Pantalla ───────────────────────────────────────────────────────────── */
+/* ── Screen ─────────────────────────────────────────────────────────────── */
 
-function Pantalla() {
-  const datos = Route.useLoaderData()
-  const busqueda = completar(Route.useSearch())
+function Screen() {
+  const data = Route.useLoaderData()
+  const search = withDefaults(Route.useSearch())
   const navigate = Route.useNavigate()
-  const { vista } = busqueda
+  const { view } = search
 
-  function irA(cambio: Partial<BusquedaRutas>) {
+  function goTo(patch: Partial<RouteSearch>) {
     navigate({
-      search: (previo) => {
-        const siguiente = { ...completar(previo), ...cambio }
-        return limpiarBusqueda(siguiente, porOmision(siguiente.vista))
+      search: (prev) => {
+        const next = { ...withDefaults(prev), ...patch }
+        return stripDefaults(next, defaultSearch(next.view))
       },
       replace: true,
     })
   }
 
-  function ordenar(campo: string) {
-    irA({
-      orden: campo,
-      dir: busqueda.orden === campo && busqueda.dir === 'asc' ? 'desc' : 'asc',
-      pagina: 1,
+  function sortBy(field: string) {
+    goTo({
+      sort: field,
+      dir: search.sort === field && search.dir === 'asc' ? 'desc' : 'asc',
+      page: 1,
     })
   }
 
-  function cambiarVista(valor: string) {
-    const nueva = unoDe(valor, VISTAS, 'rutas')
-    if (nueva === vista) return
-    irA({
-      vista: nueva,
-      pagina: 1,
-      orden: ordenPorOmision(nueva),
+  function changeView(value: string) {
+    const next = oneOf(value, VIEWS, 'routes')
+    if (next === view) return
+    goTo({
+      view: next,
+      page: 1,
+      sort: defaultSort(next),
       dir: 'asc',
-      // Los filtros propios de la otra pestaña no aplican aquí.
-      ...(nueva === 'rutas'
-        ? { ruta: [], principal: [], venta: [] }
-        : { recaudacion: [], iva: [], asientos: [] }),
+      // The other tab's own filters do not apply here.
+      ...(next === 'routes'
+        ? { route: [], main: [], sale: [] }
+        : { collection: [], iva: [], seats: [] }),
     })
   }
 
-  if (!datos.ok) {
+  if (!data.ok) {
     return (
       <>
-        <Encabezado titulo="Rutas y tramos" renglon={SIN_DATO} />
-        <EstadoError {...datos.falla} />
+        <PageHeader title="Rutas y tramos" subtitle={NO_DATA} />
+        <ErrorState {...data.failure} />
       </>
     )
   }
 
-  const { conteos, opciones, total } = datos
-  const sustantivo = vista === 'rutas' ? 'rutas' : 'tramos'
-  const enCatalogo = vista === 'rutas' ? conteos.rutas : conteos.tramos
+  const { counts, options, total } = data
+  const noun = view === 'routes' ? 'rutas' : 'tramos'
+  const inCatalog = view === 'routes' ? counts.routes : counts.segments
 
-  const hayFiltros =
-    busqueda.q.trim().length > 0 ||
-    busqueda.empresa.length > 0 ||
-    busqueda.servicio.length > 0 ||
-    busqueda.estatus.length > 0 ||
-    busqueda.bajas ||
-    (vista === 'rutas'
-      ? busqueda.recaudacion.length > 0 ||
-        busqueda.iva.length > 0 ||
-        busqueda.asientos.length > 0
-      : busqueda.ruta.length > 0 ||
-        busqueda.principal.length > 0 ||
-        busqueda.venta.length > 0)
+  const hasFilters =
+    search.q.trim().length > 0 ||
+    search.company.length > 0 ||
+    search.service.length > 0 ||
+    search.status.length > 0 ||
+    search.deleted ||
+    (view === 'routes'
+      ? search.collection.length > 0 ||
+        search.iva.length > 0 ||
+        search.seats.length > 0
+      : search.route.length > 0 ||
+        search.main.length > 0 ||
+        search.sale.length > 0)
 
-  function limpiar() {
-    irA({
+  function clear() {
+    goTo({
       q: '',
-      pagina: 1,
-      empresa: [],
-      servicio: [],
-      recaudacion: [],
+      page: 1,
+      company: [],
+      service: [],
+      collection: [],
       iva: [],
-      asientos: [],
-      estatus: [],
-      ruta: [],
-      principal: [],
-      venta: [],
-      bajas: false,
+      seats: [],
+      status: [],
+      route: [],
+      main: [],
+      sale: [],
+      deleted: false,
     })
   }
 
-  const vacio =
+  const empty =
     total === 0 ? (
-      hayFiltros ? (
-        <EstadoVacio
-          titulo={`Ningún registro coincide`}
-          detalle={`No hay ${sustantivo} que cumplan con la búsqueda y los filtros de esta hoja.`}
-          accion={
+      hasFilters ? (
+        <EmptyState
+          title={`Ningún registro coincide`}
+          detail={`No hay ${noun} que cumplan con la búsqueda y los filtros de esta hoja.`}
+          action={
             <button
               type="button"
-              onClick={limpiar}
-              className="inline-flex h-8 items-center rounded-chip border border-raya px-3 font-mono text-nota font-medium tracking-[0.08em] text-tinta-2 uppercase transition-[colors,transform] duration-100 hover:border-raya-firme hover:bg-renglon hover:text-tinta active:scale-[0.97]"
+              onClick={clear}
+              className="inline-flex h-8 items-center rounded-chip border border-rule px-3 font-mono text-note font-medium tracking-[0.08em] text-ink-2 uppercase transition-[colors,transform] duration-100 hover:border-rule-strong hover:bg-row hover:text-ink active:scale-[0.97]"
             >
               Limpiar filtros
             </button>
           }
         />
       ) : (
-        <EstadoVacio
-          titulo={
-            vista === 'rutas'
+        <EmptyState
+          title={
+            view === 'routes'
               ? 'El catálogo de rutas está vacío'
               : 'No hay tramos registrados'
           }
-          detalle={
-            vista === 'rutas'
+          detail={
+            view === 'routes'
               ? 'La base conectada no tiene ninguna ruta migrada todavía.'
               : 'Ninguna ruta de la base conectada tiene tramos migrados todavía.'
           }
@@ -345,316 +344,316 @@ function Pantalla() {
 
   return (
     <>
-      <Encabezado
-        acciones={<BotonActualizar />}
-        titulo="Rutas y tramos"
-        renglon={
-          hayFiltros
-            ? `${entero(total)} de ${entero(enCatalogo)} ${sustantivo}`
-            : `${entero(enCatalogo)} ${sustantivo} en el catálogo`
+      <PageHeader
+        actions={<RefreshButton />}
+        title="Rutas y tramos"
+        subtitle={
+          hasFilters
+            ? `${integer(total)} de ${integer(inCatalog)} ${noun}`
+            : `${integer(inCatalog)} ${noun} en el catálogo`
         }
       />
 
       <div className="px-4 sm:px-8 py-6">
-        <Hoja className="overflow-hidden">
-          <Pestanas
-            valor={vista}
-            alCambiar={cambiarVista}
-            opciones={[
-              { valor: 'rutas', rotulo: 'Rutas', conteo: conteos.rutas },
-              { valor: 'tramos', rotulo: 'Tramos', conteo: conteos.tramos },
+        <Sheet className="overflow-hidden">
+          <Tabs
+            value={view}
+            onChange={changeView}
+            options={[
+              { value: 'routes', label: 'Rutas', count: counts.routes },
+              { value: 'segments', label: 'Tramos', count: counts.segments },
             ]}
           >
-            <Pestana valor={vista}>
-              <BarraDeFiltros hayFiltros={hayFiltros} alLimpiar={limpiar}>
-                <Buscador
+            <Tab value={view}>
+              <FilterBar hasFilters={hasFilters} onClear={clear}>
+                <SearchBox
                   className="w-full max-w-72"
-                  valor={busqueda.q}
-                  marcador={
-                    vista === 'rutas'
+                  value={search.q}
+                  placeholder={
+                    view === 'routes'
                       ? 'Buscar por número o nombre de ruta…'
                       : 'Buscar por número de tramo o terminal…'
                   }
-                  alCambiar={(q) => irA({ q, pagina: 1 })}
+                  onChange={(q) => goTo({ q, page: 1 })}
                 />
 
-                <FiltroLista
-                  nombre="Empresa"
-                  opciones={opciones.empresas}
-                  seleccion={busqueda.empresa}
-                  alCambiar={(empresa) => irA({ empresa, pagina: 1 })}
+                <ListFilter
+                  label="Empresa"
+                  options={options.companies}
+                  selection={search.company}
+                  onChange={(company) => goTo({ company, page: 1 })}
                 />
-                <FiltroLista
-                  nombre="Servicio"
-                  opciones={opciones.servicios}
-                  seleccion={busqueda.servicio}
-                  alCambiar={(servicio) => irA({ servicio, pagina: 1 })}
+                <ListFilter
+                  label="Servicio"
+                  options={options.services}
+                  selection={search.service}
+                  onChange={(service) => goTo({ service, page: 1 })}
                 />
 
-                {vista === 'rutas' ? (
+                {view === 'routes' ? (
                   <>
-                    <FiltroLista
-                      nombre="Recaudación"
-                      opciones={RECAUDACION}
-                      seleccion={busqueda.recaudacion}
-                      alCambiar={(recaudacion) => irA({ recaudacion, pagina: 1 })}
+                    <ListFilter
+                      label="Recaudación"
+                      options={COLLECTION}
+                      selection={search.collection}
+                      onChange={(collection) => goTo({ collection, page: 1 })}
                     />
-                    <FiltroLista
-                      nombre="Aplica IVA"
-                      opciones={SI_NO}
-                      seleccion={busqueda.iva}
-                      alCambiar={(iva) => irA({ iva, pagina: 1 })}
+                    <ListFilter
+                      label="Aplica IVA"
+                      options={YES_NO}
+                      selection={search.iva}
+                      onChange={(iva) => goTo({ iva, page: 1 })}
                     />
-                    <FiltroLista
-                      nombre="Selección de asientos"
-                      opciones={SI_NO}
-                      seleccion={busqueda.asientos}
-                      alCambiar={(asientos) => irA({ asientos, pagina: 1 })}
+                    <ListFilter
+                      label="Selección de asientos"
+                      options={YES_NO}
+                      selection={search.seats}
+                      onChange={(seats) => goTo({ seats, page: 1 })}
                     />
                   </>
                 ) : (
                   <>
-                    <FiltroLista
-                      nombre="Ruta"
-                      opciones={opciones.rutas}
-                      seleccion={busqueda.ruta}
-                      alCambiar={(ruta) => irA({ ruta, pagina: 1 })}
-                      buscable
+                    <ListFilter
+                      label="Ruta"
+                      options={options.routes}
+                      selection={search.route}
+                      onChange={(route) => goTo({ route, page: 1 })}
+                      searchable
                     />
-                    <FiltroLista
-                      nombre="Principal"
-                      opciones={SI_NO}
-                      seleccion={busqueda.principal}
-                      alCambiar={(principal) => irA({ principal, pagina: 1 })}
+                    <ListFilter
+                      label="Principal"
+                      options={YES_NO}
+                      selection={search.main}
+                      onChange={(main) => goTo({ main, page: 1 })}
                     />
-                    <FiltroLista
-                      nombre="Permitir venta"
-                      opciones={SI_NO}
-                      seleccion={busqueda.venta}
-                      alCambiar={(venta) => irA({ venta, pagina: 1 })}
+                    <ListFilter
+                      label="Permitir venta"
+                      options={YES_NO}
+                      selection={search.sale}
+                      onChange={(sale) => goTo({ sale, page: 1 })}
                     />
                   </>
                 )}
 
-                <FiltroLista
-                  nombre="Estatus"
-                  opciones={ESTATUS}
-                  seleccion={busqueda.estatus}
-                  alCambiar={(estatus) => irA({ estatus, pagina: 1 })}
+                <ListFilter
+                  label="Estatus"
+                  options={STATUS}
+                  selection={search.status}
+                  onChange={(status) => goTo({ status, page: 1 })}
                 />
-                <Alternador
-                  nombre="Incluir bajas"
-                  encendido={busqueda.bajas}
-                  titulo="Muestra también los registros con borrado lógico (deletedAt)"
-                  alCambiar={(bajas) => irA({ bajas, pagina: 1 })}
+                <Toggle
+                  name="Incluir bajas"
+                  on={search.deleted}
+                  title="Muestra también los registros con borrado lógico (deletedAt)"
+                  onChange={(deleted) => goTo({ deleted, page: 1 })}
                 />
-              </BarraDeFiltros>
+              </FilterBar>
 
-              {vacio ??
-                (datos.vista === 'rutas' ? (
-                  <TablaRutas
-                    filas={datos.filas}
-                    orden={busqueda.orden}
-                    dir={busqueda.dir}
-                    alOrdenar={ordenar}
+              {empty ??
+                (data.view === 'routes' ? (
+                  <RoutesTable
+                    rows={data.rows}
+                    sort={search.sort}
+                    dir={search.dir}
+                    onSort={sortBy}
                   />
                 ) : (
-                  <TablaTramos
-                    filas={datos.filas}
-                    orden={busqueda.orden}
-                    dir={busqueda.dir}
-                    alOrdenar={ordenar}
+                  <SegmentsTable
+                    rows={data.rows}
+                    sort={search.sort}
+                    dir={search.dir}
+                    onSort={sortBy}
                   />
                 ))}
 
-              <Paginacion
-                pagina={busqueda.pagina}
-                porPagina={busqueda.porPagina}
+              <Pagination
+                page={search.page}
+                perPage={search.perPage}
                 total={total}
-                sustantivo={sustantivo}
-                tamanos={[...TAMANOS]}
-                alCambiarPagina={(pagina) => irA({ pagina })}
-                alCambiarTamano={(porPagina) => irA({ porPagina, pagina: 1 })}
+                noun={noun}
+                pageSizes={[...PAGE_SIZES]}
+                onPageChange={(page) => goTo({ page })}
+                onPageSizeChange={(perPage) => goTo({ perPage, page: 1 })}
               />
-            </Pestana>
-          </Pestanas>
-        </Hoja>
+            </Tab>
+          </Tabs>
+        </Sheet>
       </div>
     </>
   )
 }
 
-/* ── Manifiesto de rutas ────────────────────────────────────────────────── */
+/* ── Routes manifest ────────────────────────────────────────────────────── */
 
-type PropsOrden = {
-  orden: string
+type SortProps = {
+  sort: string
   dir: 'asc' | 'desc'
-  alOrdenar: (campo: string) => void
+  onSort: (field: string) => void
 }
 
-function TablaRutas({ filas, orden, dir, alOrdenar }: PropsOrden & { filas: Array<FilaRuta> }) {
-  const comun = { ordenActual: orden, direccion: dir, alOrdenar }
+function RoutesTable({ rows, sort, dir, onSort }: SortProps & { rows: Array<RouteRow> }) {
+  const common = { currentSort: sort, direction: dir, onSort }
   return (
-    <Manifiesto etiqueta="Rutas">
-      <Cabecera>
-        <ThOrden campo="numero" {...comun}>
+    <Manifest label="Rutas">
+      <TableHead>
+        <SortableTh field="number" {...common}>
           No.
-        </ThOrden>
-        <ThOrden campo="nombre" {...comun}>
+        </SortableTh>
+        <SortableTh field="name" {...common}>
           Nombre
-        </ThOrden>
-        <ThOrden campo="servicio" {...comun}>
+        </SortableTh>
+        <SortableTh field="service" {...common}>
           Servicio
-        </ThOrden>
-        <ThOrden campo="empresa" {...comun}>
+        </SortableTh>
+        <SortableTh field="company" {...common}>
           Empresa
-        </ThOrden>
+        </SortableTh>
         <Th>Origen → Destino</Th>
-        <ThOrden campo="tramos" numerica {...comun}>
+        <SortableTh field="segments" numeric {...common}>
           Tramos
-        </ThOrden>
-        <ThOrden campo="tarifa" numerica {...comun}>
+        </SortableTh>
+        <SortableTh field="price" numeric {...common}>
           Tarifa sencilla
-        </ThOrden>
-        <ThOrden campo="tiempo" numerica {...comun}>
+        </SortableTh>
+        <SortableTh field="travelTime" numeric {...common}>
           Tiempo
-        </ThOrden>
-        <ThOrden campo="distancia" numerica {...comun}>
+        </SortableTh>
+        <SortableTh field="distance" numeric {...common}>
           Distancia
-        </ThOrden>
-        <ThOrden campo="estatus" {...comun}>
+        </SortableTh>
+        <SortableTh field="status" {...common}>
           Estatus
-        </ThOrden>
-      </Cabecera>
-      <Cuerpo>
-        {filas.map((f) => (
-          <Fila key={f.id} atenuada={f.eliminada}>
+        </SortableTh>
+      </TableHead>
+      <TableBody>
+        {rows.map((f) => (
+          <TableRow key={f.id} dimmed={f.isDeleted}>
             <Td>
-              <EnlaceDeFila to="/rutas/$id" params={{ id: f.id }}>
-                <Clave enfasis>{f.numero}</Clave>
-              </EnlaceDeFila>
+              <RowLink to="/rutas/$id" params={{ id: f.id }}>
+                <KeyText emphasis>{f.number}</KeyText>
+              </RowLink>
             </Td>
-            <Td className="max-w-[24rem] truncate text-tinta">{f.nombre}</Td>
+            <Td className="max-w-[24rem] truncate text-ink">{f.name}</Td>
             <Td>
-              <Vinculo
+              <TextLink
                 to="/servicios/$id"
-                params={{ id: f.servicio.id }}
-                className="relative text-lectura text-tinta-2"
+                params={{ id: f.service.id }}
+                className="relative text-body text-ink-2"
               >
-                {f.servicio.etiqueta}
-              </Vinculo>
+                {f.service.label}
+              </TextLink>
             </Td>
             <Td>
-              <Vinculo
+              <TextLink
                 to="/empresas/$id"
-                params={{ id: f.empresa.id }}
-                className="relative text-lectura text-tinta-2"
+                params={{ id: f.company.id }}
+                className="relative text-body text-ink-2"
               >
-                {f.empresa.etiqueta}
-              </Vinculo>
+                {f.company.label}
+              </TextLink>
             </Td>
             <Td>
-              <Trayecto origen={f.origen} destino={f.destino} />
+              <StationPair origin={f.origin} destination={f.destination} />
             </Td>
-            <Td numerica className={f.tramos === 0 ? 'text-ambar' : undefined}>
-              {entero(f.tramos)}
+            <Td numeric className={f.segments === 0 ? 'text-amber' : undefined}>
+              {integer(f.segments)}
             </Td>
-            <Td numerica>{moneda(f.tarifaSencilla)}</Td>
-            <Td numerica className="text-tinta-2">
-              {minutos(f.tiempoMinutos)}
+            <Td numeric>{currency(f.priceOneWay)}</Td>
+            <Td numeric className="text-ink-2">
+              {minutes(f.travelTimeMinutes)}
             </Td>
-            <Td numerica className="text-tinta-2">
-              {kilometros(f.distanciaKm)}
+            <Td numeric className="text-ink-2">
+              {kilometers(f.distanceKm)}
             </Td>
             <Td>
-              <SelloActividad activa={f.activa} eliminada={f.eliminada} />
+              <ActivityStamp active={f.isActive} deleted={f.isDeleted} />
             </Td>
-          </Fila>
+          </TableRow>
         ))}
-      </Cuerpo>
-    </Manifiesto>
+      </TableBody>
+    </Manifest>
   )
 }
 
-/* ── Manifiesto plano de tramos ─────────────────────────────────────────── */
+/* ── Flat segments manifest ─────────────────────────────────────────────── */
 
-function TablaTramos({ filas, orden, dir, alOrdenar }: PropsOrden & { filas: Array<FilaTramo> }) {
-  const comun = { ordenActual: orden, direccion: dir, alOrdenar }
+function SegmentsTable({ rows, sort, dir, onSort }: SortProps & { rows: Array<SegmentRow> }) {
+  const common = { currentSort: sort, direction: dir, onSort }
   return (
-    <Manifiesto etiqueta="Tramos">
-      <Cabecera>
-        <ThOrden campo="numero" {...comun}>
+    <Manifest label="Tramos">
+      <TableHead>
+        <SortableTh field="number" {...common}>
           No.
-        </ThOrden>
-        <ThOrden campo="ruta" {...comun}>
+        </SortableTh>
+        <SortableTh field="route" {...common}>
           Ruta
-        </ThOrden>
+        </SortableTh>
         <Th>Origen → Destino</Th>
-        <ThOrden campo="estancia" numerica {...comun}>
+        <SortableTh field="stayTime" numeric {...common}>
           Estancia
-        </ThOrden>
-        <ThOrden campo="duracion" numerica {...comun}>
+        </SortableTh>
+        <SortableTh field="duration" numeric {...common}>
           Duración
-        </ThOrden>
-        <ThOrden campo="distancia" numerica {...comun}>
+        </SortableTh>
+        <SortableTh field="distance" numeric {...common}>
           Distancia
-        </ThOrden>
-        <ThOrden campo="venta" {...comun}>
+        </SortableTh>
+        <SortableTh field="sale" {...common}>
           Venta
-        </ThOrden>
-        <ThOrden campo="tarifa" numerica {...comun}>
+        </SortableTh>
+        <SortableTh field="price" numeric {...common}>
           Tarifa sencilla
-        </ThOrden>
-        <ThOrden campo="tarifaRedonda" numerica {...comun}>
+        </SortableTh>
+        <SortableTh field="priceRound" numeric {...common}>
           Tarifa redonda
-        </ThOrden>
-        <ThOrden campo="principal" {...comun}>
+        </SortableTh>
+        <SortableTh field="main" {...common}>
           Principal
-        </ThOrden>
-        <ThOrden campo="estatus" {...comun}>
+        </SortableTh>
+        <SortableTh field="status" {...common}>
           Estatus
-        </ThOrden>
-      </Cabecera>
-      <Cuerpo>
-        {filas.map((f) => (
-          <Fila key={f.id} destacada={f.principal} atenuada={f.eliminada || !f.activa}>
+        </SortableTh>
+      </TableHead>
+      <TableBody>
+        {rows.map((f) => (
+          <TableRow key={f.id} highlighted={f.isMain} dimmed={f.isDeleted || !f.isActive}>
             <Td>
-              <Clave enfasis>{f.numero}</Clave>
+              <KeyText emphasis>{f.number}</KeyText>
             </Td>
             <Td className="max-w-[22rem]">
-              <EnlaceDeFila to="/rutas/$id" params={{ id: f.ruta.id }}>
+              <RowLink to="/rutas/$id" params={{ id: f.route.id }}>
                 <span className="inline-flex items-baseline gap-2">
-                  <Clave enfasis>{f.ruta.numero}</Clave>
-                  <span className="truncate text-lectura text-tinta-2">{f.ruta.nombre}</span>
+                  <KeyText emphasis>{f.route.number}</KeyText>
+                  <span className="truncate text-body text-ink-2">{f.route.name}</span>
                 </span>
-              </EnlaceDeFila>
+              </RowLink>
             </Td>
             <Td>
-              <Trayecto origen={f.origen} destino={f.destino} />
+              <StationPair origin={f.origin} destination={f.destination} />
             </Td>
-            <Td numerica className="text-tinta-2">
-              {minutos(f.estanciaMinutos)}
+            <Td numeric className="text-ink-2">
+              {minutes(f.stayTimeMinutes)}
             </Td>
-            <Td numerica className="text-tinta-2">
-              {minutos(f.duracionMinutos)}
+            <Td numeric className="text-ink-2">
+              {minutes(f.durationMinutes)}
             </Td>
-            <Td numerica className="text-tinta-2">
-              {kilometros(f.distanciaKm)}
+            <Td numeric className="text-ink-2">
+              {kilometers(f.distanceKm)}
             </Td>
             <Td>
-              <Si valor={f.permiteVenta} />
+              <YesNo value={f.allowSale} />
             </Td>
-            <Td numerica>{moneda(f.tarifaSencilla)}</Td>
-            <Td numerica className="text-tinta-2">
-              {moneda(f.tarifaRedonda)}
+            <Td numeric>{currency(f.priceOneWay)}</Td>
+            <Td numeric className="text-ink-2">
+              {currency(f.priceRound)}
             </Td>
-            <Td>{f.principal ? <Marca /> : <span className="text-tinta-4">{SIN_DATO}</span>}</Td>
+            <Td>{f.isMain ? <MainMark /> : <span className="text-ink-4">{NO_DATA}</span>}</Td>
             <Td>
-              <SelloActividad activa={f.activa} eliminada={f.eliminada} />
+              <ActivityStamp active={f.isActive} deleted={f.isDeleted} />
             </Td>
-          </Fila>
+          </TableRow>
         ))}
-      </Cuerpo>
-    </Manifiesto>
+      </TableBody>
+    </Manifest>
   )
 }

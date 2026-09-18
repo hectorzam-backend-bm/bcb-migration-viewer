@@ -1,351 +1,361 @@
 import { createFileRoute } from '@tanstack/react-router'
 import {
-  Cifra,
-  Clave,
-  Dato,
-  Hoja,
-  Marca,
-  Rotulo,
-  Sello,
-  SelloActividad,
+  Stat,
+  KeyText,
+  Field,
+  Sheet,
+  MainMark,
+  Label,
+  Stamp,
+  ActivityStamp,
 } from '~/components/base'
-import { Encabezado, Miga, Migas, SeparadorMiga } from '~/components/cascaron'
-import { EstadoError, ManifiestoCargando } from '~/components/estados'
-import { Ficha, Rejilla, Vinculo } from '~/components/ficha'
-import { Cabecera, Cuerpo, Fila, Manifiesto, Td, Th } from '~/components/tabla'
-import { BotonActualizar } from '~/components/actualizar'
+import { PageHeader, Breadcrumb, Breadcrumbs, BreadcrumbSeparator } from '~/components/shell'
+import { ErrorState, ManifestSkeleton } from '~/components/states'
+import { Card, Grid, TextLink } from '~/components/card'
+import { TableHead, TableBody, TableRow, Manifest, Td, Th } from '~/components/table'
+import { RefreshButton } from '~/components/refresh'
 import { cn } from '~/lib/cn'
 import {
-  SIN_DATO,
-  TIPO_RECAUDACION,
-  entero,
-  kilometros,
-  minutos,
-  moneda,
+  NO_DATA,
+  COLLECTION_TYPE_LABELS,
+  integer,
+  kilometers,
+  minutes,
+  currency,
   plural,
-  porcentaje,
-} from '~/lib/formato'
-import type { DetalleRuta, Terminal, TramoDetalle } from '~/server/rutas'
-import { obtenerRuta } from '~/server/rutas'
+  percent,
+} from '~/lib/format'
+import type { RouteDetail, StationRef, SegmentDetail } from '~/server/routes'
+import { getRoute } from '~/server/routes'
 
 export const Route = createFileRoute('/rutas/$id')({
-  loader: ({ params }) => obtenerRuta({ data: { id: params.id } }),
-  component: Pantalla,
+  loader: ({ params }) => getRoute({ data: { id: params.id } }),
+  component: Screen,
   pendingComponent: () => (
     <>
-      <Encabezado titulo="Cargando ruta…" renglon={SIN_DATO} />
+      <PageHeader title="Cargando ruta…" subtitle={NO_DATA} />
       <div className="px-4 sm:px-8 py-6">
-        <Hoja className="py-2">
-          <ManifiestoCargando columnas={[8, 26, 12, 12, 12, 10]} renglones={6} />
-        </Hoja>
+        <Sheet className="py-2">
+          <ManifestSkeleton columns={[8, 26, 12, 12, 12, 10]} rows={6} />
+        </Sheet>
       </div>
     </>
   ),
   errorComponent: ({ error, reset }) => (
-    <EstadoError
-      titulo="No fue posible leer la ruta"
-      detalle={error instanceof Error ? error.message : String(error)}
-      alReintentar={reset}
+    <ErrorState
+      title="No fue posible leer la ruta"
+      detail={error instanceof Error ? error.message : String(error)}
+      onRetry={reset}
     />
   ),
 })
 
-/* ── Piezas ─────────────────────────────────────────────────────────────── */
+/* ── Pieces ─────────────────────────────────────────────────────────────── */
 
-function EnlaceTerminal({ terminal }: { terminal: Terminal }) {
+function StationLink({ station }: { station: StationRef }) {
   return (
-    <Vinculo to="/terminales/$id" params={{ id: terminal.id }}>
+    <TextLink to="/terminales/$id" params={{ id: station.id }}>
       <span className="inline-flex items-baseline gap-2">
-        <Clave enfasis>{terminal.clave}</Clave>
-        <span className="text-lectura text-tinta-2">{terminal.nombre}</span>
+        <KeyText emphasis>{station.key}</KeyText>
+        <span className="text-body text-ink-2">{station.name}</span>
       </span>
-    </Vinculo>
+    </TextLink>
   )
 }
 
-function SiNo({ valor }: { valor: boolean }) {
+function YesNo({ value }: { value: boolean }) {
   return (
-    <span className={cn('font-mono text-dato', valor ? 'text-tinta' : 'text-tinta-3')}>
-      {valor ? 'Sí' : 'No'}
+    <span className={cn('font-mono text-data', value ? 'text-ink' : 'text-ink-3')}>
+      {value ? 'Sí' : 'No'}
     </span>
   )
 }
 
-/** Recuadro discreto para los bloques que van sin tabla. */
-function Vacia({ children }: { children: string }) {
-  return <p className="text-lectura text-tinta-3">{children}</p>
+/** Discreet box for the blocks that go without a table. */
+function EmptyNote({ children }: { children: string }) {
+  return <p className="text-body text-ink-3">{children}</p>
 }
 
-/* ── Pantalla ───────────────────────────────────────────────────────────── */
+/* ── Screen ─────────────────────────────────────────────────────────────── */
 
-function Pantalla() {
-  const datos = Route.useLoaderData()
+function Screen() {
+  const data = Route.useLoaderData()
 
-  if (!datos.ok) {
+  if (!data.ok) {
     return (
       <>
-        <Encabezado
-          titulo="Ruta"
-          migas={
-            <Migas>
-              <Miga to="/rutas">Rutas y tramos</Miga>
-              <SeparadorMiga />
-              <span className="text-tinta-2">{SIN_DATO}</span>
-            </Migas>
+        <PageHeader
+          title="Ruta"
+          breadcrumbs={
+            <Breadcrumbs>
+              <Breadcrumb to="/rutas">Rutas y tramos</Breadcrumb>
+              <BreadcrumbSeparator />
+              <span className="text-ink-2">{NO_DATA}</span>
+            </Breadcrumbs>
           }
         />
-        <EstadoError {...datos.falla} />
+        <ErrorState {...data.failure} />
       </>
     )
   }
 
-  const r = datos.ruta
-  const avisos = revisarIntegridad(r)
+  const routeDetail = data.route
+  const warnings = checkIntegrity(routeDetail)
 
   return (
     <>
-      <Encabezado
-        migas={
-          <Migas>
-            <Miga to="/rutas">Rutas y tramos</Miga>
-            <SeparadorMiga />
-            <span className="text-tinta-2">{r.numero}</span>
-          </Migas>
+      <PageHeader
+        breadcrumbs={
+          <Breadcrumbs>
+            <Breadcrumb to="/rutas">Rutas y tramos</Breadcrumb>
+            <BreadcrumbSeparator />
+            <span className="text-ink-2">{routeDetail.number}</span>
+          </Breadcrumbs>
         }
-        titulo={r.nombre}
-        renglon={`${r.numero} · ${r.servicio.nombre} · ${r.empresa.nombre}`}
-        acciones={
+        title={routeDetail.name}
+        subtitle={`${routeDetail.number} · ${routeDetail.service.name} · ${routeDetail.company.name}`}
+        actions={
           <>
-            <SelloActividad activa={r.activa} eliminada={r.eliminada} />
-            <span aria-hidden className="h-4 w-px bg-raya" />
-            <BotonActualizar />
+            <ActivityStamp active={routeDetail.isActive} deleted={routeDetail.isDeleted} />
+            <span aria-hidden className="h-4 w-px bg-rule" />
+            <RefreshButton />
           </>
         }
       />
 
       <div className="flex flex-col gap-7 px-4 sm:px-8 py-6">
-        {/* Fila de cifras: lo que se cotea de un vistazo. */}
-        <Hoja>
+        {/* Row of stats: what gets checked at a glance. */}
+        <Sheet>
           <div className="grid grid-cols-2 gap-x-8 gap-y-6 p-5 sm:grid-cols-3 lg:grid-cols-6">
-            <Cifra
-              rotulo="Tramos"
-              valor={entero(r.tramos.length)}
-              nota={
-                r.tramosDeBaja > 0
-                  ? `${plural(r.tramosDeBaja, 'tramo dado de baja', 'tramos dados de baja')} sin mostrar`
+            <Stat
+              label="Tramos"
+              value={integer(routeDetail.segments.length)}
+              note={
+                routeDetail.deletedSegments > 0
+                  ? `${plural(routeDetail.deletedSegments, 'tramo dado de baja', 'tramos dados de baja')} sin mostrar`
                   : undefined
               }
             />
-            <Cifra
-              rotulo="Tarifa sencilla"
-              valor={moneda(r.tarifaSencilla)}
-              tono="sello"
+            <Stat
+              label="Tarifa sencilla"
+              value={currency(routeDetail.priceOneWay)}
+              tone="stamp"
             />
-            <Cifra rotulo="Tarifa redonda" valor={moneda(r.tarifaRedonda)} />
-            <Cifra rotulo="Tiempo de viaje" valor={minutos(r.tiempoMinutos)} />
-            <Cifra rotulo="Distancia" valor={kilometros(r.distanciaKm)} />
-            <Cifra rotulo="Estancia" valor={minutos(r.estanciaMinutos)} />
+            <Stat label="Tarifa redonda" value={currency(routeDetail.priceRound)} />
+            <Stat label="Tiempo de viaje" value={minutes(routeDetail.travelTimeMinutes)} />
+            <Stat label="Distancia" value={kilometers(routeDetail.distanceKm)} />
+            <Stat label="Estancia" value={minutes(routeDetail.stayTimeMinutes)} />
           </div>
-        </Hoja>
+        </Sheet>
 
-        <Ficha titulo="Información básica">
-          <Rejilla columnas={3}>
-            <Dato rotulo="Número" mono>
-              {r.numero}
-            </Dato>
-            <Dato rotulo="Nombre" ancho>
-              {r.nombre}
-            </Dato>
-            <Dato rotulo="Empresa">
-              <Vinculo to="/empresas/$id" params={{ id: r.empresa.id }}>
-                {r.empresa.nombre}
-              </Vinculo>
-            </Dato>
-            <Dato rotulo="Servicio">
-              <Vinculo to="/servicios/$id" params={{ id: r.servicio.id }}>
-                {r.servicio.nombre}
-              </Vinculo>
-            </Dato>
-            <Dato rotulo="Tipo de recaudación">
-              {TIPO_RECAUDACION[r.recaudacion] ?? r.recaudacion ?? SIN_DATO}
-            </Dato>
-            <Dato rotulo="Origen">
-              <EnlaceTerminal terminal={r.origen} />
-            </Dato>
-            <Dato rotulo="Destino">
-              <EnlaceTerminal terminal={r.destino} />
-            </Dato>
-            <Dato rotulo="Plantilla de unidad">{r.unidad ?? SIN_DATO}</Dato>
-            <Dato rotulo="Aplica IVA">
-              <SiNo valor={r.aplicaIva} />
-            </Dato>
-            <Dato rotulo="Selección de asientos">
-              <SiNo valor={r.seleccionAsientos} />
-            </Dato>
-            <Dato rotulo="Estatus">
-              <SelloActividad activa={r.activa} eliminada={r.eliminada} />
-            </Dato>
-          </Rejilla>
-        </Ficha>
+        <Card title="Información básica">
+          <Grid columns={3}>
+            <Field label="Número" mono>
+              {routeDetail.number}
+            </Field>
+            <Field label="Nombre" wide>
+              {routeDetail.name}
+            </Field>
+            <Field label="Empresa">
+              <TextLink to="/empresas/$id" params={{ id: routeDetail.company.id }}>
+                {routeDetail.company.name}
+              </TextLink>
+            </Field>
+            <Field label="Servicio">
+              <TextLink to="/servicios/$id" params={{ id: routeDetail.service.id }}>
+                {routeDetail.service.name}
+              </TextLink>
+            </Field>
+            <Field label="Tipo de recaudación">
+              {COLLECTION_TYPE_LABELS[routeDetail.collectionType] ??
+                routeDetail.collectionType ??
+                NO_DATA}
+            </Field>
+            <Field label="Origen">
+              <StationLink station={routeDetail.origin} />
+            </Field>
+            <Field label="Destino">
+              <StationLink station={routeDetail.destination} />
+            </Field>
+            <Field label="Plantilla de unidad">{routeDetail.unit ?? NO_DATA}</Field>
+            <Field label="Aplica IVA">
+              <YesNo value={routeDetail.appliedIva} />
+            </Field>
+            <Field label="Selección de asientos">
+              <YesNo value={routeDetail.hasSeatsSelection} />
+            </Field>
+            <Field label="Estatus">
+              <ActivityStamp active={routeDetail.isActive} deleted={routeDetail.isDeleted} />
+            </Field>
+          </Grid>
+        </Card>
 
         <div className="grid items-start gap-7 lg:grid-cols-2">
-          <Ficha
-            titulo="Canales de venta"
-            nota={r.canales.length > 0 ? entero(r.canales.length) : undefined}
+          <Card
+            title="Canales de venta"
+            note={
+              routeDetail.salesChannels.length > 0
+                ? integer(routeDetail.salesChannels.length)
+                : undefined
+            }
           >
-            {r.canales.length === 0 ? (
-              <Vacia>Sin canales configurados</Vacia>
+            {routeDetail.salesChannels.length === 0 ? (
+              <EmptyNote>Sin canales configurados</EmptyNote>
             ) : (
-              <ul className="-my-2 divide-y divide-raya-tenue">
-                {r.canales.map((c) => (
+              <ul className="-my-2 divide-y divide-rule-faint">
+                {routeDetail.salesChannels.map((c) => (
                   <li key={c.id} className="flex items-center justify-between gap-4 py-2">
-                    <span className="min-w-0 truncate text-lectura text-tinta">{c.nombre}</span>
-                    {c.eliminado ? (
-                      <Sello tono="baja">Baja</Sello>
-                    ) : c.activa ? null : (
-                      <Sello tono="inactiva">Inactivo</Sello>
+                    <span className="min-w-0 truncate text-body text-ink">{c.name}</span>
+                    {c.isDeleted ? (
+                      <Stamp tone="deleted">Baja</Stamp>
+                    ) : c.isActive ? null : (
+                      <Stamp tone="inactive">Inactivo</Stamp>
                     )}
                   </li>
                 ))}
               </ul>
             )}
-          </Ficha>
+          </Card>
 
-          <Ficha
-            titulo="Tipos de pasajero"
-            nota={r.pasajeros.length > 0 ? entero(r.pasajeros.length) : undefined}
+          <Card
+            title="Tipos de pasajero"
+            note={
+              routeDetail.passengerTypes.length > 0
+                ? integer(routeDetail.passengerTypes.length)
+                : undefined
+            }
           >
-            {r.pasajeros.length === 0 ? (
-              <Vacia>Sin tipos de pasajero configurados</Vacia>
+            {routeDetail.passengerTypes.length === 0 ? (
+              <EmptyNote>Sin tipos de pasajero configurados</EmptyNote>
             ) : (
               <div className="-m-5">
-                <Manifiesto etiqueta="Tipos de pasajero de la ruta">
-                  <Cabecera>
+                <Manifest label="Tipos de pasajero de la ruta">
+                  <TableHead>
                     <Th>Tipo</Th>
                     <Th>Clave</Th>
-                    <Th numerica>Descuento</Th>
-                    <Th numerica>Límite de asientos</Th>
-                  </Cabecera>
-                  <Cuerpo>
-                    {r.pasajeros.map((p) => (
-                      <Fila key={p.id} atenuada={!p.activo}>
-                        <Td className="text-tinta">{p.nombre}</Td>
+                    <Th numeric>Descuento</Th>
+                    <Th numeric>Límite de asientos</Th>
+                  </TableHead>
+                  <TableBody>
+                    {routeDetail.passengerTypes.map((p) => (
+                      <TableRow key={p.id} dimmed={!p.isActive}>
+                        <Td className="text-ink">{p.name}</Td>
                         <Td>
-                          <Clave>{p.clave}</Clave>
+                          <KeyText>{p.key}</KeyText>
                         </Td>
-                        <Td numerica>{porcentaje(p.descuento)}</Td>
-                        <Td numerica className={p.limite === null ? 'text-tinta-3' : undefined}>
-                          {p.limite === null ? 'Sin límite' : entero(p.limite)}
+                        <Td numeric>{percent(p.discountPercent)}</Td>
+                        <Td numeric className={p.seatingLimit === null ? 'text-ink-3' : undefined}>
+                          {p.seatingLimit === null ? 'Sin límite' : integer(p.seatingLimit)}
                         </Td>
-                      </Fila>
+                      </TableRow>
                     ))}
-                  </Cuerpo>
-                </Manifiesto>
+                  </TableBody>
+                </Manifest>
               </div>
             )}
-          </Ficha>
+          </Card>
         </div>
 
-        <LibroDeTramos ruta={r} />
+        <SegmentLedger routeDetail={routeDetail} />
 
-        <Ficha
-          titulo="Paradas de cortesía"
-          nota={r.paradas.length > 0 ? entero(r.paradas.length) : undefined}
+        <Card
+          title="Paradas de cortesía"
+          note={routeDetail.stops.length > 0 ? integer(routeDetail.stops.length) : undefined}
         >
-          {r.paradas.length === 0 ? (
-            <Vacia>Esta ruta no tiene paradas de cortesía registradas</Vacia>
+          {routeDetail.stops.length === 0 ? (
+            <EmptyNote>Esta ruta no tiene paradas de cortesía registradas</EmptyNote>
           ) : (
-            <ul className="-my-2 divide-y divide-raya-tenue">
-              {r.paradas.map((p) => (
+            <ul className="-my-2 divide-y divide-rule-faint">
+              {routeDetail.stops.map((p) => (
                 <li key={p.id} className="flex items-center gap-3 py-2">
-                  <Clave className="w-8 shrink-0 text-right">{entero(p.orden)}</Clave>
+                  <KeyText className="w-8 shrink-0 text-right">{integer(p.order)}</KeyText>
                   <span
                     className={cn(
-                      'min-w-0 flex-1 truncate text-lectura',
-                      p.activa ? 'text-tinta' : 'text-tinta-3',
+                      'min-w-0 flex-1 truncate text-body',
+                      p.isActive ? 'text-ink' : 'text-ink-3',
                     )}
                   >
-                    {p.nombre}
+                    {p.name}
                   </span>
-                  {p.activa ? null : <Sello tono="inactiva">Inactiva</Sello>}
+                  {p.isActive ? null : <Stamp tone="inactive">Inactiva</Stamp>}
                 </li>
               ))}
             </ul>
           )}
-        </Ficha>
+        </Card>
 
-        <Integridad avisos={avisos} />
+        <IntegrityCheck warnings={warnings} />
       </div>
     </>
   )
 }
 
-/* ── El libro de tramos: la firma de esta pantalla ──────────────────────── */
+/* ── The segment ledger: this screen's signature ────────────────────────── */
 
-function LibroDeTramos({ ruta }: { ruta: DetalleRuta }) {
-  const tramos = ruta.tramos
-  const conDistancia = tramos.filter((t) => t.distanciaKm !== null)
-  const sumaDistancia = conDistancia.reduce((a, t) => a + (t.distanciaKm ?? 0), 0)
-  const sumaDuracion = tramos.reduce((a, t) => a + t.duracionMinutos, 0)
-  const sumaEstancia = tramos.reduce((a, t) => a + t.estanciaMinutos, 0)
+function SegmentLedger({ routeDetail }: { routeDetail: RouteDetail }) {
+  const segments = routeDetail.segments
+  const withDistance = segments.filter((t) => t.distanceKm !== null)
+  const totalDistance = withDistance.reduce((a, t) => a + (t.distanceKm ?? 0), 0)
+  const totalDuration = segments.reduce((a, t) => a + t.durationMinutes, 0)
+  const totalStay = segments.reduce((a, t) => a + t.stayTimeMinutes, 0)
 
   return (
-    <Ficha
-      titulo="Tramos"
-      nota={
-        ruta.tramosDeBaja > 0
-          ? `${plural(tramos.length, 'tramo vigente', 'tramos vigentes')} · ${entero(ruta.tramosDeBaja)} de baja sin mostrar`
-          : plural(tramos.length, 'tramo', 'tramos')
+    <Card
+      title="Tramos"
+      note={
+        routeDetail.deletedSegments > 0
+          ? `${plural(segments.length, 'tramo vigente', 'tramos vigentes')} · ${integer(routeDetail.deletedSegments)} de baja sin mostrar`
+          : plural(segments.length, 'tramo', 'tramos')
       }
     >
-      {tramos.length === 0 ? (
-        <Vacia>
+      {segments.length === 0 ? (
+        <EmptyNote>
           Esta ruta no tiene ningún tramo migrado. Sin tramos, la ruta no se puede vender.
-        </Vacia>
+        </EmptyNote>
       ) : (
         <div className="-m-5">
-          <Manifiesto etiqueta={`Tramos de la ruta ${ruta.numero}`}>
-            <Cabecera>
+          <Manifest label={`Tramos de la ruta ${routeDetail.number}`}>
+            <TableHead>
               <Th>No.</Th>
               <Th>Origen → Destino</Th>
-              <Th numerica>Estancia</Th>
-              <Th numerica>Duración</Th>
-              <Th numerica>Distancia</Th>
+              <Th numeric>Estancia</Th>
+              <Th numeric>Duración</Th>
+              <Th numeric>Distancia</Th>
               <Th>Venta</Th>
-              <Th numerica>Tarifa sencilla</Th>
-              <Th numerica>Tarifa redonda</Th>
-            </Cabecera>
-            <Cuerpo>
-              {tramos.map((t) => (
-                <RenglonDeTramo key={t.id} tramo={t} />
+              <Th numeric>Tarifa sencilla</Th>
+              <Th numeric>Tarifa redonda</Th>
+            </TableHead>
+            <TableBody>
+              {segments.map((t) => (
+                <SegmentLine key={t.id} segment={t} />
               ))}
-            </Cuerpo>
-            {/* El corte del manifiesto impreso: raya doble y totales. */}
+            </TableBody>
+            {/* The printed manifest's cut: double rule and totals. */}
             <tfoot>
-              <tr className="[&>td]:border-t-[3px] [&>td]:border-double [&>td]:border-raya-firme [&>td]:px-3 [&>td]:py-2.5">
-                <td className="font-mono text-nota font-medium tracking-[0.085em] text-tinta-3 uppercase">
+              <tr className="[&>td]:border-t-[3px] [&>td]:border-double [&>td]:border-rule-strong [&>td]:px-3 [&>td]:py-2.5">
+                <td className="font-mono text-note font-medium tracking-[0.085em] text-ink-3 uppercase">
                   Total
                 </td>
-                <td className="font-mono text-dato text-tinta-2">
-                  {plural(tramos.length, 'tramo', 'tramos')}
+                <td className="font-mono text-data text-ink-2">
+                  {plural(segments.length, 'tramo', 'tramos')}
                 </td>
-                <td className="text-right font-mono text-dato font-medium text-tinta">
-                  {minutos(sumaEstancia)}
+                <td className="text-right font-mono text-data font-medium text-ink">
+                  {minutes(totalStay)}
                 </td>
-                <td className="text-right font-mono text-dato font-medium text-tinta">
-                  {minutos(sumaDuracion)}
+                <td className="text-right font-mono text-data font-medium text-ink">
+                  {minutes(totalDuration)}
                 </td>
                 <td
-                  className="text-right font-mono text-dato font-medium text-tinta"
+                  className="text-right font-mono text-data font-medium text-ink"
                   title={
-                    conDistancia.length === tramos.length
+                    withDistance.length === segments.length
                       ? undefined
-                      : `Suma de ${entero(conDistancia.length)} de ${entero(tramos.length)} tramos con distancia registrada`
+                      : `Suma de ${integer(withDistance.length)} de ${integer(segments.length)} tramos con distancia registrada`
                   }
                 >
-                  {kilometros(sumaDistancia)}
-                  {conDistancia.length === tramos.length ? null : (
-                    <span className="text-tinta-4"> *</span>
+                  {kilometers(totalDistance)}
+                  {withDistance.length === segments.length ? null : (
+                    <span className="text-ink-4"> *</span>
                   )}
                 </td>
                 <td />
@@ -353,107 +363,107 @@ function LibroDeTramos({ ruta }: { ruta: DetalleRuta }) {
                 <td />
               </tr>
             </tfoot>
-          </Manifiesto>
+          </Manifest>
         </div>
       )}
-    </Ficha>
+    </Card>
   )
 }
 
-function RenglonDeTramo({ tramo }: { tramo: TramoDetalle }) {
+function SegmentLine({ segment }: { segment: SegmentDetail }) {
   return (
-    <Fila destacada={tramo.principal} atenuada={!tramo.activa}>
+    <TableRow highlighted={segment.isMain} dimmed={!segment.isActive}>
       <Td>
         <span className="inline-flex items-center gap-1.5">
-          <Clave enfasis>{tramo.numero}</Clave>
-          {tramo.principal ? <Marca /> : null}
+          <KeyText emphasis>{segment.number}</KeyText>
+          {segment.isMain ? <MainMark /> : null}
         </span>
       </Td>
       <Td>
         <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-          <Vinculo to="/terminales/$id" params={{ id: tramo.origen.id }}>
-            <Clave>{tramo.origen.clave}</Clave>
-          </Vinculo>
-          <span aria-hidden className="text-tinta-4">
+          <TextLink to="/terminales/$id" params={{ id: segment.origin.id }}>
+            <KeyText>{segment.origin.key}</KeyText>
+          </TextLink>
+          <span aria-hidden className="text-ink-4">
             →
           </span>
-          <Vinculo to="/terminales/$id" params={{ id: tramo.destino.id }}>
-            <Clave>{tramo.destino.clave}</Clave>
-          </Vinculo>
-          <span className="ml-1 truncate text-dato text-tinta-3">
-            {tramo.origen.nombre} — {tramo.destino.nombre}
+          <TextLink to="/terminales/$id" params={{ id: segment.destination.id }}>
+            <KeyText>{segment.destination.key}</KeyText>
+          </TextLink>
+          <span className="ml-1 truncate text-data text-ink-3">
+            {segment.origin.name} — {segment.destination.name}
           </span>
         </span>
       </Td>
-      <Td numerica className="text-tinta-2">
-        {minutos(tramo.estanciaMinutos)}
+      <Td numeric className="text-ink-2">
+        {minutes(segment.stayTimeMinutes)}
       </Td>
-      <Td numerica className="text-tinta-2">
-        {minutos(tramo.duracionMinutos)}
+      <Td numeric className="text-ink-2">
+        {minutes(segment.durationMinutes)}
       </Td>
-      <Td numerica className="text-tinta-2">
-        {kilometros(tramo.distanciaKm)}
+      <Td numeric className="text-ink-2">
+        {kilometers(segment.distanceKm)}
       </Td>
       <Td>
-        <SiNo valor={tramo.permiteVenta} />
+        <YesNo value={segment.allowSale} />
       </Td>
-      <Td numerica>{moneda(tramo.tarifaSencilla)}</Td>
-      <Td numerica className="text-tinta-2">
-        {moneda(tramo.tarifaRedonda)}
+      <Td numeric>{currency(segment.priceOneWay)}</Td>
+      <Td numeric className="text-ink-2">
+        {currency(segment.priceRound)}
       </Td>
-    </Fila>
+    </TableRow>
   )
 }
 
-/* ── Verificación de integridad ─────────────────────────────────────────── */
+/* ── Integrity check ────────────────────────────────────────────────────── */
 
 /**
- * Sólo dos comprobaciones, y ambas son las que un cotejo de migración busca:
- * que exista tramo principal y que su trayecto sea el de la ruta.
+ * Only two checks, and both are the ones a migration cross-check looks for:
+ * that a main segment exists and that its station pair is the route's.
  */
-function revisarIntegridad(r: DetalleRuta): Array<string> {
-  const avisos: Array<string> = []
-  const principal = r.tramos.find((t) => t.principal)
+function checkIntegrity(routeDetail: RouteDetail): Array<string> {
+  const warnings: Array<string> = []
+  const main = routeDetail.segments.find((t) => t.isMain)
 
-  if (r.tramos.length === 0) return avisos
+  if (routeDetail.segments.length === 0) return warnings
 
-  if (!principal) {
-    avisos.push(
-      `Ninguno de los ${entero(r.tramos.length)} tramos de esta ruta está marcado como principal (isMain). Sin tramo principal no hay trayecto origen–destino vendible.`,
+  if (!main) {
+    warnings.push(
+      `Ninguno de los ${integer(routeDetail.segments.length)} tramos de esta ruta está marcado como principal (isMain). Sin tramo principal no hay trayecto origen–destino vendible.`,
     )
-    return avisos
+    return warnings
   }
 
-  if (principal.origen.id !== r.origen.id) {
-    avisos.push(
-      `El origen de la ruta es ${r.origen.clave} (${r.origen.nombre}), pero el del tramo principal ${principal.numero} es ${principal.origen.clave} (${principal.origen.nombre}).`,
+  if (main.origin.id !== routeDetail.origin.id) {
+    warnings.push(
+      `El origen de la ruta es ${routeDetail.origin.key} (${routeDetail.origin.name}), pero el del tramo principal ${main.number} es ${main.origin.key} (${main.origin.name}).`,
     )
   }
-  if (principal.destino.id !== r.destino.id) {
-    avisos.push(
-      `El destino de la ruta es ${r.destino.clave} (${r.destino.nombre}), pero el del tramo principal ${principal.numero} es ${principal.destino.clave} (${principal.destino.nombre}).`,
+  if (main.destination.id !== routeDetail.destination.id) {
+    warnings.push(
+      `El destino de la ruta es ${routeDetail.destination.key} (${routeDetail.destination.name}), pero el del tramo principal ${main.number} es ${main.destination.key} (${main.destination.name}).`,
     )
   }
 
-  return avisos
+  return warnings
 }
 
-function Integridad({ avisos }: { avisos: Array<string> }) {
+function IntegrityCheck({ warnings }: { warnings: Array<string> }) {
   return (
     <section aria-label="Verificación de integridad" className="pb-2">
-      <Rotulo>Verificación de integridad</Rotulo>
-      {avisos.length === 0 ? (
-        <p className="mt-2 text-dato text-tinta-3">
+      <Label>Verificación de integridad</Label>
+      {warnings.length === 0 ? (
+        <p className="mt-2 text-data text-ink-3">
           El tramo principal coincide con el origen y el destino de la ruta.
         </p>
       ) : (
         <ul className="mt-3 flex flex-col gap-2.5">
-          {avisos.map((aviso) => (
-            <li key={aviso} className="flex items-start gap-2.5">
-              <Sello tono="aviso" className="mt-px shrink-0">
+          {warnings.map((warning) => (
+            <li key={warning} className="flex items-start gap-2.5">
+              <Stamp tone="warning" className="mt-px shrink-0">
                 Aviso
-              </Sello>
-              <span className="text-lectura text-tinta-2">{aviso}</span>
+              </Stamp>
+              <span className="text-body text-ink-2">{warning}</span>
             </li>
           ))}
         </ul>

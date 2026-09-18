@@ -1,240 +1,240 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Clave, Dato, Hoja, Marca, Rotulo, SelloActividad } from '~/components/base'
-import { Encabezado, Miga, Migas, SeparadorMiga } from '~/components/cascaron'
-import { EstadoError, EstadoVacio, ManifiestoCargando } from '~/components/estados'
-import { Ficha, Pestana, Pestanas, Rejilla, VinculoExterno } from '~/components/ficha'
-import { BotonActualizar } from '~/components/actualizar'
+import { KeyText, Field, Sheet, MainMark, Label, ActivityStamp } from '~/components/base'
+import { PageHeader, Breadcrumb, Breadcrumbs, BreadcrumbSeparator } from '~/components/shell'
+import { ErrorState, EmptyState, ManifestSkeleton } from '~/components/states'
+import { Card, Tab, Tabs, Grid, ExternalTextLink } from '~/components/card'
+import { RefreshButton } from '~/components/refresh'
 import {
-  Cabecera,
-  Cuerpo,
-  EnlaceDeFila,
-  Fila,
-  Manifiesto,
+  TableHead,
+  TableBody,
+  RowLink,
+  TableRow,
+  Manifest,
   Td,
   Th,
-} from '~/components/tabla'
+} from '~/components/table'
 import {
-  SIN_DATO,
-  TIPO_TERMINAL,
-  coordenada,
-  entero as enteroFmt,
-  fecha,
-  fechaHora,
-  kilometros,
-  minutos,
-  moneda,
-} from '~/lib/formato'
-import { limpiarBusqueda, unoDe } from '~/lib/parametros'
+  NO_DATA,
+  STATION_TYPE_LABELS,
+  coordinate,
+  integer,
+  date,
+  dateTime,
+  kilometers,
+  minutes,
+  currency,
+} from '~/lib/format'
+import { stripDefaults, oneOf } from '~/lib/params'
 import {
-  obtenerTerminal,
-  type ArchivoTerminal,
-  type RutaDeTerminal,
-} from '~/server/terminales'
+  getStation,
+  type StationFile,
+  type StationRoute,
+} from '~/server/stations'
 
-const PESTANAS = ['servicios', 'salidas', 'llegadas', 'tramos'] as const
-type PestanaTerminal = (typeof PESTANAS)[number]
+const TABS = ['services', 'departures', 'arrivals', 'segments'] as const
+type StationTab = (typeof TABS)[number]
 
-/** Opcional a propósito: la pestaña por omisión no se escribe en la dirección. */
-type BusquedaTerminal = { pestana?: PestanaTerminal }
+/** Optional on purpose: the default tab is not written to the URL. */
+type StationDetailSearch = { tab?: StationTab }
 
 export const Route = createFileRoute('/terminales/$id')({
-  validateSearch: (entrada: Record<string, unknown>): BusquedaTerminal =>
-    limpiarBusqueda(
-      { pestana: unoDe(entrada.pestana, PESTANAS, 'servicios') },
-      { pestana: 'servicios' },
+  validateSearch: (input: Record<string, unknown>): StationDetailSearch =>
+    stripDefaults(
+      { tab: oneOf(input.tab, TABS, 'services') },
+      { tab: 'services' },
     ),
-  loader: ({ params }) => obtenerTerminal({ data: { id: params.id } }),
-  component: Pantalla,
+  loader: ({ params }) => getStation({ data: { id: params.id } }),
+  component: Screen,
   pendingComponent: () => (
     <>
-      <Encabezado titulo="Terminal" renglon="Leyendo la ficha…" />
+      <PageHeader title="Terminal" subtitle="Leyendo la ficha…" />
       <div className="px-4 sm:px-8 py-6">
-        <Hoja className="overflow-hidden py-2">
-          <ManifiestoCargando columnas={[12, 26, 20, 14, 10]} renglones={6} />
-        </Hoja>
+        <Sheet className="overflow-hidden py-2">
+          <ManifestSkeleton columns={[12, 26, 20, 14, 10]} rows={6} />
+        </Sheet>
       </div>
     </>
   ),
   errorComponent: ({ error, reset }) => (
     <>
-      <Encabezado titulo="Terminal" />
-      <EstadoError
-        titulo="No fue posible leer la ficha de la terminal"
-        detalle={error instanceof Error ? error.message : String(error)}
-        alReintentar={reset}
+      <PageHeader title="Terminal" />
+      <ErrorState
+        title="No fue posible leer la ficha de la terminal"
+        detail={error instanceof Error ? error.message : String(error)}
+        onRetry={reset}
       />
     </>
   ),
 })
 
-/* ── Piezas locales ───────────────────────────────────────────────────────── */
+/* ── Local pieces ─────────────────────────────────────────────────────────── */
 
-/** Bytes a KB/MB: el peso de un archivo se lee mejor redondeado. */
-function pesoDeArchivo(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return SIN_DATO
-  if (bytes < 1024) return `${enteroFmt(bytes)} B`
+/** Bytes to KB/MB: a file's size reads better rounded. */
+function fileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return NO_DATA
+  if (bytes < 1024) return `${integer(bytes)} B`
   const kb = bytes / 1024
   if (kb < 1024) return `${kb.toFixed(kb < 10 ? 1 : 0)} KB`
   const mb = kb / 1024
   return `${mb.toFixed(mb < 10 ? 1 : 0)} MB`
 }
 
-function Fotografia({ rotulo, archivo }: { rotulo: string; archivo: ArchivoTerminal }) {
+function Photo({ label, file }: { label: string; file: StationFile }) {
   return (
     <div>
-      <Rotulo>{rotulo}</Rotulo>
+      <Label>{label}</Label>
       <div className="mt-1 min-w-0">
-        <VinculoExterno href={archivo.url}>{archivo.nombre}</VinculoExterno>
+        <ExternalTextLink href={file.url}>{file.name}</ExternalTextLink>
       </div>
-      <p data-cifra className="mt-1 font-mono text-nota text-tinta-3">
-        {archivo.tipo} <span className="text-tinta-4">·</span> {pesoDeArchivo(archivo.bytes)}
+      <p data-numeric className="mt-1 font-mono text-note text-ink-3">
+        {file.type} <span className="text-ink-4">·</span> {fileSize(file.bytes)}
       </p>
     </div>
   )
 }
 
-/** Par origen → destino; la terminal de la ficha va en tinta plena. */
-function Trayecto({
-  origen,
-  destino,
-  actual,
+/** Origin → destination pair; the station of this card is in full ink. */
+function StationPair({
+  origin,
+  destination,
+  currentId,
 }: {
-  origen: { id: string; numero: string; nombreCorto: string }
-  destino: { id: string; numero: string; nombreCorto: string }
-  actual: string
+  origin: { id: string; number: string; shortName: string }
+  destination: { id: string; number: string; shortName: string }
+  currentId: string
 }) {
   return (
     <span className="flex items-center gap-2 whitespace-nowrap">
       <span
-        className={tintaDelExtremo(origen.id === actual)}
-        title={`Terminal ${origen.numero}`}
+        className={endpointClass(origin.id === currentId)}
+        title={`Terminal ${origin.number}`}
       >
-        {origen.nombreCorto}
+        {origin.shortName}
       </span>
-      <span aria-hidden className="text-tinta-4">
+      <span aria-hidden className="text-ink-4">
         →
       </span>
       <span
-        className={tintaDelExtremo(destino.id === actual)}
-        title={`Terminal ${destino.numero}`}
+        className={endpointClass(destination.id === currentId)}
+        title={`Terminal ${destination.number}`}
       >
-        {destino.nombreCorto}
+        {destination.shortName}
       </span>
     </span>
   )
 }
 
-function tintaDelExtremo(actual: boolean) {
-  return actual
-    ? 'font-mono text-dato font-medium text-tinta'
-    : 'font-mono text-dato text-tinta-3'
+function endpointClass(isCurrent: boolean) {
+  return isCurrent
+    ? 'font-mono text-data font-medium text-ink'
+    : 'font-mono text-data text-ink-3'
 }
 
-function TablaDeRutas({
-  rutas,
-  columnaExtremo,
-  extremo,
-  vacio,
+function RouteTable({
+  routes,
+  endpointColumn,
+  endpoint,
+  empty,
 }: {
-  rutas: Array<RutaDeTerminal>
-  columnaExtremo: string
-  extremo: (r: RutaDeTerminal) => { numero: string; nombreCorto: string }
-  vacio: string
+  routes: Array<StationRoute>
+  endpointColumn: string
+  endpoint: (r: StationRoute) => { number: string; shortName: string }
+  empty: string
 }) {
-  if (rutas.length === 0) {
-    return <EstadoVacio titulo={vacio} />
+  if (routes.length === 0) {
+    return <EmptyState title={empty} />
   }
   return (
-    <Manifiesto etiqueta={columnaExtremo}>
-      <Cabecera>
+    <Manifest label={endpointColumn}>
+      <TableHead>
         <Th>No. ruta</Th>
         <Th>Nombre</Th>
-        <Th>{columnaExtremo}</Th>
+        <Th>{endpointColumn}</Th>
         <Th>Servicio</Th>
-        <Th numerica>Tiempo</Th>
-        <Th numerica>Distancia</Th>
-        <Th numerica>Tarifa sencilla</Th>
+        <Th numeric>Tiempo</Th>
+        <Th numeric>Distancia</Th>
+        <Th numeric>Tarifa sencilla</Th>
         <Th>Estatus</Th>
-      </Cabecera>
-      <Cuerpo>
-        {rutas.map((r) => {
-          const otro = extremo(r)
+      </TableHead>
+      <TableBody>
+        {routes.map((r) => {
+          const other = endpoint(r)
           return (
-            <Fila key={r.id} atenuada={r.baja}>
+            <TableRow key={r.id} dimmed={r.isDeleted}>
               <Td>
-                <EnlaceDeFila to="/rutas/$id" params={{ id: r.id }}>
-                  <Clave enfasis>{r.numero}</Clave>
-                </EnlaceDeFila>
+                <RowLink to="/rutas/$id" params={{ id: r.id }}>
+                  <KeyText emphasis>{r.number}</KeyText>
+                </RowLink>
               </Td>
               <Td>
-                <span className="block max-w-[24rem] truncate text-tinta-2" title={r.nombre}>
-                  {r.nombre}
+                <span className="block max-w-[24rem] truncate text-ink-2" title={r.name}>
+                  {r.name}
                 </span>
               </Td>
               <Td>
-                <span className="font-mono text-dato whitespace-nowrap text-tinta-2">
-                  {otro.numero} <span className="text-tinta-4">·</span> {otro.nombreCorto}
+                <span className="font-mono text-data whitespace-nowrap text-ink-2">
+                  {other.number} <span className="text-ink-4">·</span> {other.shortName}
                 </span>
               </Td>
               <Td>
-                <span className="font-mono text-dato whitespace-nowrap text-tinta-2">
-                  {r.servicio.numero} <span className="text-tinta-4">·</span>{' '}
-                  {r.servicio.nombreCorto}
+                <span className="font-mono text-data whitespace-nowrap text-ink-2">
+                  {r.service.number} <span className="text-ink-4">·</span>{' '}
+                  {r.service.shortName}
                 </span>
               </Td>
-              <Td numerica>{minutos(r.minutos)}</Td>
-              <Td numerica>{kilometros(r.kilometros)}</Td>
-              <Td numerica>{moneda(r.tarifaSencilla)}</Td>
+              <Td numeric>{minutes(r.travelTimeMinutes)}</Td>
+              <Td numeric>{kilometers(r.distanceKm)}</Td>
+              <Td numeric>{currency(r.priceOneWay)}</Td>
               <Td>
-                <SelloActividad activa={r.activa} eliminada={r.baja} />
+                <ActivityStamp active={r.isActive} deleted={r.isDeleted} />
               </Td>
-            </Fila>
+            </TableRow>
           )
         })}
-      </Cuerpo>
-    </Manifiesto>
+      </TableBody>
+    </Manifest>
   )
 }
 
-/* ── Pantalla ─────────────────────────────────────────────────────────────── */
+/* ── Screen ───────────────────────────────────────────────────────────────── */
 
-function Pantalla() {
-  const datos = Route.useLoaderData()
-  const pestana = Route.useSearch().pestana ?? 'servicios'
+function Screen() {
+  const data = Route.useLoaderData()
+  const tab = Route.useSearch().tab ?? 'services'
   const navigate = Route.useNavigate()
 
-  if (!datos.ok) {
+  if (!data.ok) {
     return (
       <>
-        <Encabezado
-          titulo="Terminal"
-          migas={
-            <Migas>
-              <Miga to="/terminales">Terminales</Miga>
-            </Migas>
+        <PageHeader
+          title="Terminal"
+          breadcrumbs={
+            <Breadcrumbs>
+              <Breadcrumb to="/terminales">Terminales</Breadcrumb>
+            </Breadcrumbs>
           }
         />
-        <EstadoError {...datos.falla} />
+        <ErrorState {...data.failure} />
       </>
     )
   }
 
-  const { terminal: t, salidas, llegadas, tramos } = datos
+  const { station: t, departures, arrivals, segments } = data
 
-  const hayCoordenadas =
-    Number.isFinite(t.latitud) &&
-    Number.isFinite(t.longitud) &&
-    (t.latitud !== 0 || t.longitud !== 0)
-  const mapa = hayCoordenadas
-    ? `https://www.google.com/maps/search/?api=1&query=${t.latitud},${t.longitud}`
+  const hasCoordinates =
+    Number.isFinite(t.latitude) &&
+    Number.isFinite(t.longitude) &&
+    (t.latitude !== 0 || t.longitude !== 0)
+  const mapUrl = hasCoordinates
+    ? `https://www.google.com/maps/search/?api=1&query=${t.latitude},${t.longitude}`
     : null
 
-  function irAPestana(valor: string) {
+  function goToTab(value: string) {
     void navigate({
       search: () =>
-        limpiarBusqueda(
-          { pestana: unoDe(valor, PESTANAS, 'servicios') },
-          { pestana: 'servicios' },
+        stripDefaults(
+          { tab: oneOf(value, TABS, 'services') },
+          { tab: 'services' },
         ),
       replace: true,
     })
@@ -242,306 +242,306 @@ function Pantalla() {
 
   return (
     <>
-      <Encabezado
-        migas={
-          <Migas>
-            <Miga to="/terminales">Terminales</Miga>
-            <SeparadorMiga />
-            <span className="text-tinta-2">{t.numero}</span>
-          </Migas>
+      <PageHeader
+        breadcrumbs={
+          <Breadcrumbs>
+            <Breadcrumb to="/terminales">Terminales</Breadcrumb>
+            <BreadcrumbSeparator />
+            <span className="text-ink-2">{t.number}</span>
+          </Breadcrumbs>
         }
-        titulo={t.nombre}
-        renglon={
+        title={t.name}
+        subtitle={
           <>
-            <span className="text-tinta-2">{t.numero}</span>
-            <span className="text-tinta-4"> · </span>
-            {t.nombreCorto}
+            <span className="text-ink-2">{t.number}</span>
+            <span className="text-ink-4"> · </span>
+            {t.shortName}
           </>
         }
-        acciones={
+        actions={
           <>
-            <SelloActividad activa={t.activa} eliminada={t.baja} />
-            <span aria-hidden className="h-4 w-px bg-raya" />
-            <BotonActualizar />
+            <ActivityStamp active={t.isActive} deleted={t.isDeleted} />
+            <span aria-hidden className="h-4 w-px bg-rule" />
+            <RefreshButton />
           </>
         }
       />
 
       <div className="px-4 sm:px-8 py-6">
         <div className="grid items-start gap-5 lg:grid-cols-2">
-          <Ficha titulo="Identificación">
-            <Rejilla columnas={2}>
-              <Dato rotulo="No. terminal" mono>
-                {t.numero}
-              </Dato>
-              <Dato rotulo="Nombre corto" mono>
-                {t.nombreCorto}
-              </Dato>
-              <Dato rotulo="Nombre completo" ancho>
-                {t.nombre}
-              </Dato>
-              <Dato rotulo="Tipo">{TIPO_TERMINAL[t.tipo] ?? t.tipo}</Dato>
-              <Dato rotulo="Estatus">
-                <SelloActividad activa={t.activa} eliminada={t.baja} />
-              </Dato>
-            </Rejilla>
-          </Ficha>
+          <Card title="Identificación">
+            <Grid columns={2}>
+              <Field label="No. terminal" mono>
+                {t.number}
+              </Field>
+              <Field label="Nombre corto" mono>
+                {t.shortName}
+              </Field>
+              <Field label="Nombre completo" wide>
+                {t.name}
+              </Field>
+              <Field label="Tipo">{STATION_TYPE_LABELS[t.type] ?? t.type}</Field>
+              <Field label="Estatus">
+                <ActivityStamp active={t.isActive} deleted={t.isDeleted} />
+              </Field>
+            </Grid>
+          </Card>
 
-          <Ficha titulo="Ubicación">
-            <Rejilla columnas={2}>
-              <Dato rotulo="Dirección" ancho>
-                {t.direccion ?? <span className="text-tinta-4">{SIN_DATO}</span>}
-              </Dato>
-              <Dato rotulo="Estado de la república">
-                {t.estado ?? <span className="text-tinta-4">{SIN_DATO}</span>}
-              </Dato>
-              <Dato rotulo="Teléfono" mono>
-                {t.telefono ?? <span className="text-tinta-4">{SIN_DATO}</span>}
-              </Dato>
-              <Dato rotulo="Latitud" mono>
-                {hayCoordenadas ? (
-                  coordenada(t.latitud)
+          <Card title="Ubicación">
+            <Grid columns={2}>
+              <Field label="Dirección" wide>
+                {t.address ?? <span className="text-ink-4">{NO_DATA}</span>}
+              </Field>
+              <Field label="Estado de la república">
+                {t.state ?? <span className="text-ink-4">{NO_DATA}</span>}
+              </Field>
+              <Field label="Teléfono" mono>
+                {t.phone ?? <span className="text-ink-4">{NO_DATA}</span>}
+              </Field>
+              <Field label="Latitud" mono>
+                {hasCoordinates ? (
+                  coordinate(t.latitude)
                 ) : (
-                  <span className="text-tinta-4">{SIN_DATO}</span>
+                  <span className="text-ink-4">{NO_DATA}</span>
                 )}
-              </Dato>
-              <Dato rotulo="Longitud" mono>
-                {hayCoordenadas ? (
-                  coordenada(t.longitud)
+              </Field>
+              <Field label="Longitud" mono>
+                {hasCoordinates ? (
+                  coordinate(t.longitude)
                 ) : (
-                  <span className="text-tinta-4">{SIN_DATO}</span>
+                  <span className="text-ink-4">{NO_DATA}</span>
                 )}
-              </Dato>
-              <Dato rotulo="Mapa" ancho>
-                {mapa || t.urlGoogle ? (
+              </Field>
+              <Field label="Mapa" wide>
+                {mapUrl || t.googleUrl ? (
                   <div className="flex flex-col items-start gap-1.5">
-                    {mapa ? (
-                      <VinculoExterno href={mapa}>Abrir en Google Maps</VinculoExterno>
+                    {mapUrl ? (
+                      <ExternalTextLink href={mapUrl}>Abrir en Google Maps</ExternalTextLink>
                     ) : null}
-                    {t.urlGoogle ? (
-                      <VinculoExterno href={t.urlGoogle}>{t.urlGoogle}</VinculoExterno>
+                    {t.googleUrl ? (
+                      <ExternalTextLink href={t.googleUrl}>{t.googleUrl}</ExternalTextLink>
                     ) : null}
                   </div>
                 ) : (
-                  <span className="text-tinta-4">{SIN_DATO}</span>
+                  <span className="text-ink-4">{NO_DATA}</span>
                 )}
-              </Dato>
-            </Rejilla>
-          </Ficha>
+              </Field>
+            </Grid>
+          </Card>
         </div>
 
         <div className="mt-5 grid items-start gap-5 lg:grid-cols-2">
-          <Ficha
-            titulo="Fotografías"
-            nota={
-              t.fachada || t.isometrico
-                ? `${[t.fachada, t.isometrico].filter(Boolean).length} de 2`
+          <Card
+            title="Fotografías"
+            note={
+              t.facadePhoto || t.isometricPhoto
+                ? `${[t.facadePhoto, t.isometricPhoto].filter(Boolean).length} de 2`
                 : undefined
             }
           >
-            {t.fachada || t.isometrico ? (
-              <Rejilla columnas={2}>
-                {t.fachada ? <Fotografia rotulo="Fachada" archivo={t.fachada} /> : null}
-                {t.isometrico ? (
-                  <Fotografia rotulo="Isométrico" archivo={t.isometrico} />
+            {t.facadePhoto || t.isometricPhoto ? (
+              <Grid columns={2}>
+                {t.facadePhoto ? <Photo label="Fachada" file={t.facadePhoto} /> : null}
+                {t.isometricPhoto ? (
+                  <Photo label="Isométrico" file={t.isometricPhoto} />
                 ) : null}
-              </Rejilla>
+              </Grid>
             ) : (
-              <p className="text-lectura text-tinta-3">
+              <p className="text-body text-ink-3">
                 Sin fotografías registradas para esta terminal.
               </p>
             )}
-          </Ficha>
+          </Card>
 
-          <Ficha
-            titulo="Donaciones"
-            nota={t.donaciones.length > 0 ? `${enteroFmt(t.donaciones.length)}` : undefined}
+          <Card
+            title="Donaciones"
+            note={t.donations.length > 0 ? `${integer(t.donations.length)}` : undefined}
           >
-            {t.donaciones.length === 0 ? (
-              <p className="text-lectura text-tinta-3">
+            {t.donations.length === 0 ? (
+              <p className="text-body text-ink-3">
                 Sin activaciones de donativo registradas.
               </p>
             ) : (
               <ul>
-                {t.donaciones.map((d) => (
+                {t.donations.map((d) => (
                   <li
                     key={d.id}
-                    className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-raya-tenue py-2 first:pt-0 last:border-b-0 last:pb-0"
+                    className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-rule-faint py-2 first:pt-0 last:border-b-0 last:pb-0"
                   >
-                    <span data-cifra className="font-mono text-dato text-tinta-2">
-                      {fecha(d.inicio)} <span className="text-tinta-4">→</span> {fecha(d.fin)}
+                    <span data-numeric className="font-mono text-data text-ink-2">
+                      {date(d.startDate)} <span className="text-ink-4">→</span> {date(d.endDate)}
                     </span>
-                    <SelloActividad activa={d.activa} />
+                    <ActivityStamp active={d.isActive} />
                   </li>
                 ))}
               </ul>
             )}
-          </Ficha>
+          </Card>
         </div>
 
-        <Hoja className="mt-5 overflow-hidden">
-          <Pestanas
-            valor={pestana}
-            alCambiar={irAPestana}
-            opciones={[
-              { valor: 'servicios', rotulo: 'Servicios', conteo: t.servicios.length },
-              { valor: 'salidas', rotulo: 'Rutas que salen de aquí', conteo: salidas.length },
-              { valor: 'llegadas', rotulo: 'Rutas que llegan', conteo: llegadas.length },
-              { valor: 'tramos', rotulo: 'Tramos', conteo: tramos.length },
+        <Sheet className="mt-5 overflow-hidden">
+          <Tabs
+            value={tab}
+            onChange={goToTab}
+            options={[
+              { value: 'services', label: 'Servicios', count: t.services.length },
+              { value: 'departures', label: 'Rutas que salen de aquí', count: departures.length },
+              { value: 'arrivals', label: 'Rutas que llegan', count: arrivals.length },
+              { value: 'segments', label: 'Tramos', count: segments.length },
             ]}
           >
-            <Pestana valor="servicios">
-              {t.servicios.length === 0 ? (
-                <EstadoVacio
-                  titulo="Sin servicios asociados"
-                  detalle="Esta terminal no está dada de alta en ningún servicio, por lo que tampoco se le puede deducir una empresa."
+            <Tab value="services">
+              {t.services.length === 0 ? (
+                <EmptyState
+                  title="Sin servicios asociados"
+                  detail="Esta terminal no está dada de alta en ningún servicio, por lo que tampoco se le puede deducir una empresa."
                 />
               ) : (
-                <Manifiesto etiqueta="Servicios de la terminal">
-                  <Cabecera>
+                <Manifest label="Servicios de la terminal">
+                  <TableHead>
                     <Th>No. servicio</Th>
                     <Th>Clave</Th>
                     <Th>Nombre corto</Th>
                     <Th>Nombre completo</Th>
                     <Th>Empresa</Th>
                     <Th>Estatus</Th>
-                  </Cabecera>
-                  <Cuerpo>
-                    {t.servicios.map((s) => (
-                      <Fila key={s.id} atenuada={s.baja}>
+                  </TableHead>
+                  <TableBody>
+                    {t.services.map((s) => (
+                      <TableRow key={s.id} dimmed={s.isDeleted}>
                         <Td>
-                          <EnlaceDeFila to="/servicios/$id" params={{ id: s.id }}>
-                            <Clave enfasis>{s.numero}</Clave>
-                          </EnlaceDeFila>
+                          <RowLink to="/servicios/$id" params={{ id: s.id }}>
+                            <KeyText emphasis>{s.number}</KeyText>
+                          </RowLink>
                         </Td>
                         <Td>
-                          <Clave>{s.clave}</Clave>
+                          <KeyText>{s.key}</KeyText>
                         </Td>
                         <Td>
-                          <span className="font-mono text-dato whitespace-nowrap text-tinta">
-                            {s.nombreCorto}
+                          <span className="font-mono text-data whitespace-nowrap text-ink">
+                            {s.shortName}
                           </span>
                         </Td>
                         <Td>
                           <span
-                            className="block max-w-[24rem] truncate text-tinta-2"
-                            title={s.nombreCompleto}
+                            className="block max-w-[24rem] truncate text-ink-2"
+                            title={s.fullName}
                           >
-                            {s.nombreCompleto}
+                            {s.fullName}
                           </span>
                         </Td>
                         <Td>
-                          <span className="whitespace-nowrap text-tinta-2">
-                            <span className="font-mono text-dato text-tinta-3">
-                              {s.empresa.clave}
+                          <span className="whitespace-nowrap text-ink-2">
+                            <span className="font-mono text-data text-ink-3">
+                              {s.company.key}
                             </span>{' '}
-                            {s.empresa.nombreCorto}
+                            {s.company.shortName}
                           </span>
                         </Td>
                         <Td>
-                          <SelloActividad activa={s.activo} eliminada={s.baja} />
+                          <ActivityStamp active={s.isActive} deleted={s.isDeleted} />
                         </Td>
-                      </Fila>
+                      </TableRow>
                     ))}
-                  </Cuerpo>
-                </Manifiesto>
+                  </TableBody>
+                </Manifest>
               )}
-            </Pestana>
+            </Tab>
 
-            <Pestana valor="salidas">
-              <TablaDeRutas
-                rutas={salidas}
-                columnaExtremo="Destino"
-                extremo={(r) => r.destino}
-                vacio="Ninguna ruta sale de esta terminal"
+            <Tab value="departures">
+              <RouteTable
+                routes={departures}
+                endpointColumn="Destino"
+                endpoint={(r) => r.destination}
+                empty="Ninguna ruta sale de esta terminal"
               />
-            </Pestana>
+            </Tab>
 
-            <Pestana valor="llegadas">
-              <TablaDeRutas
-                rutas={llegadas}
-                columnaExtremo="Origen"
-                extremo={(r) => r.origen}
-                vacio="Ninguna ruta llega a esta terminal"
+            <Tab value="arrivals">
+              <RouteTable
+                routes={arrivals}
+                endpointColumn="Origen"
+                endpoint={(r) => r.origin}
+                empty="Ninguna ruta llega a esta terminal"
               />
-            </Pestana>
+            </Tab>
 
-            <Pestana valor="tramos">
-              {tramos.length === 0 ? (
-                <EstadoVacio
-                  titulo="Sin tramos que toquen esta terminal"
-                  detalle="Ningún tramo la usa como origen ni como destino."
+            <Tab value="segments">
+              {segments.length === 0 ? (
+                <EmptyState
+                  title="Sin tramos que toquen esta terminal"
+                  detail="Ningún tramo la usa como origen ni como destino."
                 />
               ) : (
-                <Manifiesto etiqueta="Tramos que tocan la terminal">
-                  <Cabecera>
+                <Manifest label="Tramos que tocan la terminal">
+                  <TableHead>
                     <Th>No. tramo</Th>
                     <Th>Ruta</Th>
                     <Th>Trayecto</Th>
-                    <Th numerica>Tarifa sencilla</Th>
+                    <Th numeric>Tarifa sencilla</Th>
                     <Th>Estatus</Th>
-                  </Cabecera>
-                  <Cuerpo>
-                    {tramos.map((s) => (
-                      <Fila key={s.id} atenuada={s.baja}>
+                  </TableHead>
+                  <TableBody>
+                    {segments.map((s) => (
+                      <TableRow key={s.id} dimmed={s.isDeleted}>
                         <Td>
                           <span className="flex items-center gap-2">
-                            <Clave enfasis>{s.numero}</Clave>
-                            {s.principal ? <Marca /> : null}
+                            <KeyText emphasis>{s.number}</KeyText>
+                            {s.isMain ? <MainMark /> : null}
                           </span>
                         </Td>
                         <Td>
-                          <EnlaceDeFila to="/rutas/$id" params={{ id: s.ruta.id }}>
+                          <RowLink to="/rutas/$id" params={{ id: s.route.id }}>
                             <span className="flex items-baseline gap-2 whitespace-nowrap">
-                              <Clave enfasis>{s.ruta.numero}</Clave>
-                              <span className="max-w-[20rem] truncate text-tinta-2">
-                                {s.ruta.nombre}
+                              <KeyText emphasis>{s.route.number}</KeyText>
+                              <span className="max-w-[20rem] truncate text-ink-2">
+                                {s.route.name}
                               </span>
                             </span>
-                          </EnlaceDeFila>
+                          </RowLink>
                         </Td>
                         <Td>
-                          <Trayecto origen={s.origen} destino={s.destino} actual={t.id} />
+                          <StationPair origin={s.origin} destination={s.destination} currentId={t.id} />
                         </Td>
-                        <Td numerica>{moneda(s.tarifaSencilla)}</Td>
+                        <Td numeric>{currency(s.priceOneWay)}</Td>
                         <Td>
-                          <SelloActividad activa={s.activo} eliminada={s.baja} />
+                          <ActivityStamp active={s.isActive} deleted={s.isDeleted} />
                         </Td>
-                      </Fila>
+                      </TableRow>
                     ))}
-                  </Cuerpo>
-                </Manifiesto>
+                  </TableBody>
+                </Manifest>
               )}
-            </Pestana>
-          </Pestanas>
-        </Hoja>
+            </Tab>
+          </Tabs>
+        </Sheet>
 
-        <Ficha titulo="Rastro" className="mt-5">
-          <Rejilla columnas={4}>
-            <Dato rotulo="Identificador" mono>
+        <Card title="Rastro" className="mt-5">
+          <Grid columns={4}>
+            <Field label="Identificador" mono>
               {t.id}
-            </Dato>
-            <Dato rotulo="Alta" mono>
-              {fechaHora(t.creadaEn)}
-              <span className="mt-1 block font-sans text-nota text-tinta-3">
-                {t.creadaPor ?? SIN_DATO}
+            </Field>
+            <Field label="Alta" mono>
+              {dateTime(t.createdAt)}
+              <span className="mt-1 block font-sans text-note text-ink-3">
+                {t.createdBy ?? NO_DATA}
               </span>
-            </Dato>
-            <Dato rotulo="Última edición" mono>
-              {fechaHora(t.actualizadaEn)}
-              <span className="mt-1 block font-sans text-nota text-tinta-3">
-                {t.actualizadaPor ?? SIN_DATO}
+            </Field>
+            <Field label="Última edición" mono>
+              {dateTime(t.updatedAt)}
+              <span className="mt-1 block font-sans text-note text-ink-3">
+                {t.updatedBy ?? NO_DATA}
               </span>
-            </Dato>
-            <Dato rotulo="Baja" mono>
-              {t.eliminadaEn ? (
-                <span className="text-oxido">{fechaHora(t.eliminadaEn)}</span>
+            </Field>
+            <Field label="Baja" mono>
+              {t.deletedAt ? (
+                <span className="text-rust">{dateTime(t.deletedAt)}</span>
               ) : (
-                <span className="text-tinta-4">{SIN_DATO}</span>
+                <span className="text-ink-4">{NO_DATA}</span>
               )}
-            </Dato>
-          </Rejilla>
-        </Ficha>
+            </Field>
+          </Grid>
+        </Card>
       </div>
     </>
   )

@@ -12,9 +12,9 @@ export default defineConfig({
     tanstackStart(),
     viteReact(),
   ],
-  // El cliente de Prisma y el driver `pg` sólo corren en el servidor.
+  // The Prisma client and the `pg` driver only run on the server.
   ssr: { external: ['@prisma/client', '@prisma/adapter-pg', 'pg'] },
-  // Y no deben acabar en el paquete pre-optimizado del navegador: src/server/db.ts
-  // los importa detrás de `import.meta.env.SSR`, así que en el cliente nunca se piden.
+  // And they must not end up in the browser's pre-optimized bundle: src/server/db.ts
+  // imports them behind `import.meta.env.SSR`, so the client never asks for them.
   optimizeDeps: { exclude: ['@prisma/client', '@prisma/adapter-pg', 'pg'] },
 })

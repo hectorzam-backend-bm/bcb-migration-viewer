@@ -1,246 +1,246 @@
 import { useCallback } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { Check } from 'lucide-react'
-import { Clave, Hoja, SelloActividad } from '~/components/base'
-import { Encabezado } from '~/components/cascaron'
-import { EstadoError, EstadoVacio, ManifiestoCargando } from '~/components/estados'
-import { BarraDeFiltros, Buscador, FiltroLista } from '~/components/filtros'
-import { BotonActualizar } from '~/components/actualizar'
+import { KeyText, Sheet, ActivityStamp } from '~/components/base'
+import { PageHeader } from '~/components/shell'
+import { ErrorState, EmptyState, ManifestSkeleton } from '~/components/states'
+import { FilterBar, SearchBox, ListFilter } from '~/components/filters'
+import { RefreshButton } from '~/components/refresh'
 import {
-  Cabecera,
-  Cuerpo,
-  EnlaceDeFila,
-  Fila,
-  Manifiesto,
-  Paginacion,
+  TableHead,
+  TableBody,
+  RowLink,
+  TableRow,
+  Manifest,
+  Pagination,
   Td,
   Th,
-  ThOrden,
-} from '~/components/tabla'
+  SortableTh,
+} from '~/components/table'
 import { cn } from '~/lib/cn'
-import { SIN_DATO, TIPO_TERMINAL, plural } from '~/lib/formato'
+import { NO_DATA, STATION_TYPE_LABELS, plural } from '~/lib/format'
 import {
-  DIRECCIONES,
-  TAMANOS,
-  booleano,
-  entero,
-  limpiarBusqueda,
-  lista,
-  tamanoDePagina,
-  texto,
-  unoDe,
-  type Direccion,
-} from '~/lib/parametros'
+  DIRECTIONS,
+  PAGE_SIZES,
+  bool,
+  integerParam,
+  stripDefaults,
+  list,
+  pageSize,
+  text,
+  oneOf,
+  type Direction,
+} from '~/lib/params'
 import {
-  ESTATUS_TERMINAL,
-  ORDENES_TERMINAL,
-  TIPOS_TERMINAL,
-  listarTerminales,
-  type BusquedaTerminales,
-} from '~/server/terminales'
+  STATION_STATUSES,
+  STATION_SORTS,
+  STATION_TYPES,
+  listStations,
+  type StationSearch,
+} from '~/server/stations'
 
 /**
- * Dos formas del mismo estado:
- *  · `BusquedaEnURL` es lo que se escribe en la dirección — todo opcional y las
- *    listas en una sola cadena separada por comas, para que el enlace se pueda
- *    leer y pegar. El enrutador reescribe la URL con lo que devuelve
- *    `validateSearch`: si devolviera el objeto completo, cada visita quedaría con
- *    `?q=&pagina=1&porPagina=25&…` encima.
- *  · `BusquedaTerminales` es lo que consume la función de servidor, ya completo.
+ * Two shapes of the same state:
+ *  · `UrlSearch` is what gets written to the URL — everything optional and the
+ *    lists in a single comma-separated string, so the link can be read and
+ *    pasted. The router rewrites the URL with whatever `validateSearch`
+ *    returns: if it returned the whole object, every visit would end up with
+ *    `?q=&page=1&perPage=25&…` on top.
+ *  · `StationSearch` is what the server function consumes, already complete.
  */
-type BusquedaEnURL = {
+type UrlSearch = {
   q?: string
-  pagina?: number
-  porPagina?: number
-  orden?: (typeof ORDENES_TERMINAL)[number]
-  dir?: Direccion
-  empresa?: string
-  servicio?: string
-  tipo?: string
-  estado?: string
-  estatus?: string
-  bajas?: boolean
+  page?: number
+  perPage?: number
+  sort?: (typeof STATION_SORTS)[number]
+  dir?: Direction
+  company?: string
+  service?: string
+  type?: string
+  state?: string
+  status?: string
+  deleted?: boolean
 }
 
-const POR_OMISION_EN_URL = {
+const URL_DEFAULTS = {
   q: '',
-  pagina: 1,
-  porPagina: TAMANOS[0],
-  orden: 'numero',
+  page: 1,
+  perPage: PAGE_SIZES[0],
+  sort: 'number',
   dir: 'asc',
-  empresa: '',
-  servicio: '',
-  tipo: '',
-  estado: '',
-  estatus: '',
-  bajas: false,
-} satisfies Required<BusquedaEnURL>
+  company: '',
+  service: '',
+  type: '',
+  state: '',
+  status: '',
+  deleted: false,
+} satisfies Required<UrlSearch>
 
-/** Rellena los valores por omisión: la vista y el servidor siempre reciben todo. */
-function completar(s: BusquedaEnURL): BusquedaTerminales {
+/** Fills in the defaults: the view and the server always receive everything. */
+function withDefaults(s: UrlSearch): StationSearch {
   return {
-    q: s.q ?? POR_OMISION_EN_URL.q,
-    pagina: s.pagina ?? POR_OMISION_EN_URL.pagina,
-    porPagina: s.porPagina ?? POR_OMISION_EN_URL.porPagina,
-    orden: s.orden ?? 'numero',
+    q: s.q ?? URL_DEFAULTS.q,
+    page: s.page ?? URL_DEFAULTS.page,
+    perPage: s.perPage ?? URL_DEFAULTS.perPage,
+    sort: s.sort ?? 'number',
     dir: s.dir ?? 'asc',
-    empresa: lista(s.empresa),
-    servicio: lista(s.servicio),
-    tipo: lista(s.tipo),
-    estado: lista(s.estado),
-    estatus: lista(s.estatus),
-    bajas: s.bajas ?? POR_OMISION_EN_URL.bajas,
+    company: list(s.company),
+    service: list(s.service),
+    type: list(s.type),
+    state: list(s.state),
+    status: list(s.status),
+    deleted: s.deleted ?? URL_DEFAULTS.deleted,
   }
 }
 
-/** Quita de la dirección todo lo que ya es el valor por omisión. */
-function aURL(b: BusquedaTerminales): BusquedaEnURL {
-  return limpiarBusqueda(
+/** Drops from the URL everything that already is the default value. */
+function toUrl(b: StationSearch): UrlSearch {
+  return stripDefaults(
     {
       q: b.q.trim(),
-      pagina: b.pagina,
-      porPagina: b.porPagina,
-      orden: b.orden,
+      page: b.page,
+      perPage: b.perPage,
+      sort: b.sort,
       dir: b.dir,
-      empresa: b.empresa.join(','),
-      servicio: b.servicio.join(','),
-      tipo: b.tipo.join(','),
-      estado: b.estado.join(','),
-      estatus: b.estatus.join(','),
-      bajas: b.bajas,
+      company: b.company.join(','),
+      service: b.service.join(','),
+      type: b.type.join(','),
+      state: b.state.join(','),
+      status: b.status.join(','),
+      deleted: b.deleted,
     },
-    POR_OMISION_EN_URL,
+    URL_DEFAULTS,
   )
 }
 
 export const Route = createFileRoute('/terminales/')({
-  validateSearch: (entrada: Record<string, unknown>): BusquedaEnURL =>
-    aURL({
-      q: texto(entrada.q),
-      pagina: entero(entrada.pagina, 1, 1),
-      porPagina: tamanoDePagina(entrada.porPagina),
-      orden: unoDe(entrada.orden, ORDENES_TERMINAL, 'numero'),
-      dir: unoDe(entrada.dir, DIRECCIONES, 'asc'),
-      empresa: lista(entrada.empresa),
-      servicio: lista(entrada.servicio),
-      tipo: lista(entrada.tipo),
-      estado: lista(entrada.estado),
-      estatus: lista(entrada.estatus),
-      bajas: booleano(entrada.bajas),
+  validateSearch: (input: Record<string, unknown>): UrlSearch =>
+    toUrl({
+      q: text(input.q),
+      page: integerParam(input.page, 1, 1),
+      perPage: pageSize(input.perPage),
+      sort: oneOf(input.sort, STATION_SORTS, 'number'),
+      dir: oneOf(input.dir, DIRECTIONS, 'asc'),
+      company: list(input.company),
+      service: list(input.service),
+      type: list(input.type),
+      state: list(input.state),
+      status: list(input.status),
+      deleted: bool(input.deleted),
     }),
-  loaderDeps: ({ search }) => completar(search),
-  loader: ({ deps }) => listarTerminales({ data: deps }),
-  component: Pantalla,
+  loaderDeps: ({ search }) => withDefaults(search),
+  loader: ({ deps }) => listStations({ data: deps }),
+  component: Screen,
   pendingComponent: () => (
     <>
-      <Encabezado titulo="Terminales" renglon="Leyendo el catálogo…" />
+      <PageHeader title="Terminales" subtitle="Leyendo el catálogo…" />
       <div className="px-4 sm:px-8 py-6">
-        <Hoja className="overflow-hidden py-2">
-          <ManifiestoCargando columnas={[7, 12, 22, 8, 13, 16, 12, 8]} />
-        </Hoja>
+        <Sheet className="overflow-hidden py-2">
+          <ManifestSkeleton columns={[7, 12, 22, 8, 13, 16, 12, 8]} />
+        </Sheet>
       </div>
     </>
   ),
   errorComponent: ({ error, reset }) => (
     <>
-      <Encabezado titulo="Terminales" />
-      <EstadoError
-        titulo="No fue posible leer el catálogo de terminales"
-        detalle={error instanceof Error ? error.message : String(error)}
-        alReintentar={reset}
+      <PageHeader title="Terminales" />
+      <ErrorState
+        title="No fue posible leer el catálogo de terminales"
+        detail={error instanceof Error ? error.message : String(error)}
+        onRetry={reset}
       />
     </>
   ),
 })
 
-/* ── Controles locales ────────────────────────────────────────────────────── */
+/* ── Local controls ───────────────────────────────────────────────────────── */
 
-/** Casilla de la barra de filtros. No es un interruptor de datos: filtra la vista. */
-function Casilla({
-  nombre,
-  marcada,
-  alCambiar,
+/** Filter-bar checkbox. Not a data switch: it filters the view. */
+function Checkbox({
+  name,
+  checked,
+  onChange,
 }: {
-  nombre: string
-  marcada: boolean
-  alCambiar: (marcada: boolean) => void
+  name: string
+  checked: boolean
+  onChange: (checked: boolean) => void
 }) {
   return (
     <button
       type="button"
       role="checkbox"
-      aria-checked={marcada}
-      onClick={() => alCambiar(!marcada)}
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
       className={cn(
-        'inline-flex h-9 items-center gap-2 rounded-chip border px-3 text-lectura',
+        'inline-flex h-9 items-center gap-2 rounded-chip border px-3 text-body',
         'transition-[colors,transform] duration-100 active:scale-[0.98]',
-        marcada
-          ? 'border-sello/40 bg-sello-lavado text-tinta'
-          : 'border-raya border-dashed bg-transparent text-tinta-2 hover:border-raya-firme hover:border-solid hover:bg-renglon',
+        checked
+          ? 'border-stamp/40 bg-stamp-wash text-ink'
+          : 'border-rule border-dashed bg-transparent text-ink-2 hover:border-rule-strong hover:border-solid hover:bg-row',
       )}
     >
       <span
         aria-hidden
         className={cn(
           'grid size-[15px] shrink-0 place-items-center rounded-[2px] border transition-colors duration-100',
-          marcada ? 'border-sello bg-sello text-hoja' : 'border-raya-firme',
+          checked ? 'border-stamp bg-stamp text-sheet' : 'border-rule-strong',
         )}
       >
-        {marcada ? <Check size={10} strokeWidth={3} /> : null}
+        {checked ? <Check size={10} strokeWidth={3} /> : null}
       </span>
-      <span className="font-medium whitespace-nowrap">{nombre}</span>
+      <span className="font-medium whitespace-nowrap">{name}</span>
     </button>
   )
 }
 
-/** Hasta dos valores en el renglón; el resto se resume en "+N" y vive en el title. */
-function Resumen({ valores, vacio }: { valores: Array<string>; vacio: string }) {
-  if (valores.length === 0) {
+/** Up to two values in the row; the rest collapses into "+N" and lives in the title. */
+function Summary({ values, empty }: { values: Array<string>; empty: string }) {
+  if (values.length === 0) {
     return (
-      <span className="text-tinta-4" title={vacio}>
-        {SIN_DATO}
+      <span className="text-ink-4" title={empty}>
+        {NO_DATA}
       </span>
     )
   }
-  const visibles = valores.slice(0, 2)
-  const resto = valores.length - visibles.length
+  const visible = values.slice(0, 2)
+  const rest = values.length - visible.length
   return (
-    <span className="flex items-center gap-2" title={valores.join('\n')}>
-      {visibles.map((v) => (
+    <span className="flex items-center gap-2" title={values.join('\n')}>
+      {visible.map((v) => (
         <span
           key={v}
-          className="border-l border-raya pl-2 font-mono text-dato whitespace-nowrap text-tinta-2 first:border-l-0 first:pl-0"
+          className="border-l border-rule pl-2 font-mono text-data whitespace-nowrap text-ink-2 first:border-l-0 first:pl-0"
         >
           {v}
         </span>
       ))}
-      {resto > 0 ? (
+      {rest > 0 ? (
         <span
-          data-cifra
-          className="shrink-0 rounded-chip bg-renglon px-1 font-mono text-nota text-tinta-3"
+          data-numeric
+          className="shrink-0 rounded-chip bg-row px-1 font-mono text-note text-ink-3"
         >
-          +{resto}
+          +{rest}
         </span>
       ) : null}
     </span>
   )
 }
 
-/* ── Pantalla ─────────────────────────────────────────────────────────────── */
+/* ── Screen ───────────────────────────────────────────────────────────────── */
 
-function Pantalla() {
-  const datos = Route.useLoaderData()
-  const busqueda = completar(Route.useSearch())
+function Screen() {
+  const data = Route.useLoaderData()
+  const search = withDefaults(Route.useSearch())
   const navigate = Route.useNavigate()
 
-  const cambiar = useCallback(
-    (parche: Partial<BusquedaTerminales>, reiniciarPagina = true) => {
+  const update = useCallback(
+    (patch: Partial<StationSearch>, resetPage = true) => {
       void navigate({
         search: (prev) =>
-          aURL({
-            ...completar(prev),
-            ...parche,
-            ...(reiniciarPagina ? { pagina: 1 } : {}),
+          toUrl({
+            ...withDefaults(prev),
+            ...patch,
+            ...(resetPage ? { page: 1 } : {}),
           }),
         replace: true,
       })
@@ -248,224 +248,224 @@ function Pantalla() {
     [navigate],
   )
 
-  const alBuscar = useCallback((q: string) => cambiar({ q }), [cambiar])
+  const onSearch = useCallback((q: string) => update({ q }), [update])
 
-  const hayFiltros =
-    busqueda.q.trim() !== '' ||
-    busqueda.empresa.length > 0 ||
-    busqueda.servicio.length > 0 ||
-    busqueda.tipo.length > 0 ||
-    busqueda.estado.length > 0 ||
-    busqueda.estatus.length > 0 ||
-    busqueda.bajas
+  const hasFilters =
+    search.q.trim() !== '' ||
+    search.company.length > 0 ||
+    search.service.length > 0 ||
+    search.type.length > 0 ||
+    search.state.length > 0 ||
+    search.status.length > 0 ||
+    search.deleted
 
-  if (!datos.ok) {
+  if (!data.ok) {
     return (
       <>
-        <Encabezado titulo="Terminales" />
-        <EstadoError {...datos.falla} />
+        <PageHeader title="Terminales" />
+        <ErrorState {...data.failure} />
       </>
     )
   }
 
-  const { filas, total, pagina, opciones } = datos
+  const { rows, total, page, options } = data
 
-  function alOrdenar(campo: string) {
-    const mismo = busqueda.orden === campo
-    cambiar({
-      orden: unoDe(campo, ORDENES_TERMINAL, 'numero'),
-      dir: mismo && busqueda.dir === 'asc' ? 'desc' : 'asc',
+  function onSort(field: string) {
+    const same = search.sort === field
+    update({
+      sort: oneOf(field, STATION_SORTS, 'number'),
+      dir: same && search.dir === 'asc' ? 'desc' : 'asc',
     })
   }
 
   return (
     <>
-      <Encabezado
-        acciones={<BotonActualizar />}
-        titulo="Terminales"
-        renglon={
-          hayFiltros
+      <PageHeader
+        actions={<RefreshButton />}
+        title="Terminales"
+        subtitle={
+          hasFilters
             ? `${plural(total, 'terminal', 'terminales')} con los filtros aplicados`
             : plural(total, 'terminal en el catálogo', 'terminales en el catálogo')
         }
       />
 
       <div className="px-4 sm:px-8 py-6">
-        <Hoja className="overflow-hidden">
-          <BarraDeFiltros
-            hayFiltros={hayFiltros}
-            alLimpiar={() =>
-              cambiar({
+        <Sheet className="overflow-hidden">
+          <FilterBar
+            hasFilters={hasFilters}
+            onClear={() =>
+              update({
                 q: '',
-                empresa: [],
-                servicio: [],
-                tipo: [],
-                estado: [],
-                estatus: [],
-                bajas: false,
+                company: [],
+                service: [],
+                type: [],
+                state: [],
+                status: [],
+                deleted: false,
               })
             }
           >
-            <Buscador
-              valor={busqueda.q}
-              alCambiar={alBuscar}
-              marcador="Buscar por número, nombre o dirección…"
+            <SearchBox
+              value={search.q}
+              onChange={onSearch}
+              placeholder="Buscar por número, nombre o dirección…"
               className="w-full max-w-[22rem]"
             />
-            <FiltroLista
-              nombre="Empresa"
-              opciones={opciones.empresas}
-              seleccion={busqueda.empresa}
-              alCambiar={(empresa) => cambiar({ empresa })}
+            <ListFilter
+              label="Empresa"
+              options={options.companies}
+              selection={search.company}
+              onChange={(company) => update({ company })}
             />
-            <FiltroLista
-              nombre="Servicio"
-              opciones={opciones.servicios}
-              seleccion={busqueda.servicio}
-              alCambiar={(servicio) => cambiar({ servicio })}
+            <ListFilter
+              label="Servicio"
+              options={options.services}
+              selection={search.service}
+              onChange={(service) => update({ service })}
             />
-            <FiltroLista
-              nombre="Tipo"
-              opciones={TIPOS_TERMINAL.map((t) => ({
-                valor: t,
-                etiqueta: TIPO_TERMINAL[t] ?? t,
+            <ListFilter
+              label="Tipo"
+              options={STATION_TYPES.map((t) => ({
+                value: t,
+                label: STATION_TYPE_LABELS[t] ?? t,
               }))}
-              seleccion={busqueda.tipo}
-              alCambiar={(tipo) => cambiar({ tipo })}
+              selection={search.type}
+              onChange={(type) => update({ type })}
             />
-            <FiltroLista
-              nombre="Estado"
-              opciones={opciones.estados}
-              seleccion={busqueda.estado}
-              alCambiar={(estado) => cambiar({ estado })}
+            <ListFilter
+              label="Estado"
+              options={options.states}
+              selection={search.state}
+              onChange={(state) => update({ state })}
             />
-            <FiltroLista
-              nombre="Estatus"
-              opciones={ESTATUS_TERMINAL.map((e) => ({
-                valor: e,
-                etiqueta: e === 'activa' ? 'Activa' : 'Inactiva',
+            <ListFilter
+              label="Estatus"
+              options={STATION_STATUSES.map((e) => ({
+                value: e,
+                label: e === 'active' ? 'Activa' : 'Inactiva',
               }))}
-              seleccion={busqueda.estatus}
-              alCambiar={(estatus) => cambiar({ estatus })}
+              selection={search.status}
+              onChange={(status) => update({ status })}
             />
-            <Casilla
-              nombre="Incluir bajas"
-              marcada={busqueda.bajas}
-              alCambiar={(bajas) => cambiar({ bajas })}
+            <Checkbox
+              name="Incluir bajas"
+              checked={search.deleted}
+              onChange={(deleted) => update({ deleted })}
             />
-          </BarraDeFiltros>
+          </FilterBar>
 
-          {filas.length === 0 ? (
-            hayFiltros ? (
-              <EstadoVacio
-                titulo="Ninguna terminal coincide"
-                detalle="Ningún registro cumple con la búsqueda y los filtros activos. Prueba con menos criterios."
+          {rows.length === 0 ? (
+            hasFilters ? (
+              <EmptyState
+                title="Ninguna terminal coincide"
+                detail="Ningún registro cumple con la búsqueda y los filtros activos. Prueba con menos criterios."
               />
             ) : (
-              <EstadoVacio
-                titulo="El catálogo de terminales está vacío"
-                detalle="La base conectada no tiene terminales vigentes. Si esperabas registros, revisa que apuntes a la base migrada."
+              <EmptyState
+                title="El catálogo de terminales está vacío"
+                detail="La base conectada no tiene terminales vigentes. Si esperabas registros, revisa que apuntes a la base migrada."
               />
             )
           ) : (
-            <Manifiesto etiqueta="Catálogo de terminales">
-              <Cabecera>
-                <ThOrden
-                  campo="numero"
-                  ordenActual={busqueda.orden}
-                  direccion={busqueda.dir}
-                  alOrdenar={alOrdenar}
+            <Manifest label="Catálogo de terminales">
+              <TableHead>
+                <SortableTh
+                  field="number"
+                  currentSort={search.sort}
+                  direction={search.dir}
+                  onSort={onSort}
                 >
                   No. terminal
-                </ThOrden>
-                <ThOrden
-                  campo="nombreCorto"
-                  ordenActual={busqueda.orden}
-                  direccion={busqueda.dir}
-                  alOrdenar={alOrdenar}
+                </SortableTh>
+                <SortableTh
+                  field="shortName"
+                  currentSort={search.sort}
+                  direction={search.dir}
+                  onSort={onSort}
                 >
                   Nombre corto
-                </ThOrden>
-                <ThOrden
-                  campo="nombre"
-                  ordenActual={busqueda.orden}
-                  direccion={busqueda.dir}
-                  alOrdenar={alOrdenar}
+                </SortableTh>
+                <SortableTh
+                  field="name"
+                  currentSort={search.sort}
+                  direction={search.dir}
+                  onSort={onSort}
                 >
                   Nombre completo
-                </ThOrden>
+                </SortableTh>
                 <Th>Tipo</Th>
-                <ThOrden
-                  campo="estado"
-                  ordenActual={busqueda.orden}
-                  direccion={busqueda.dir}
-                  alOrdenar={alOrdenar}
+                <SortableTh
+                  field="state"
+                  currentSort={search.sort}
+                  direction={search.dir}
+                  onSort={onSort}
                 >
                   Estado
-                </ThOrden>
+                </SortableTh>
                 <Th>Servicios</Th>
                 <Th>Empresas</Th>
                 <Th>Estatus</Th>
-              </Cabecera>
-              <Cuerpo>
-                {filas.map((f) => (
-                  <Fila key={f.id} atenuada={f.baja}>
+              </TableHead>
+              <TableBody>
+                {rows.map((f) => (
+                  <TableRow key={f.id} dimmed={f.isDeleted}>
                     <Td>
-                      <EnlaceDeFila to="/terminales/$id" params={{ id: f.id }}>
-                        <Clave enfasis>{f.numero}</Clave>
-                      </EnlaceDeFila>
+                      <RowLink to="/terminales/$id" params={{ id: f.id }}>
+                        <KeyText emphasis>{f.number}</KeyText>
+                      </RowLink>
                     </Td>
                     <Td>
-                      <span className="font-mono text-dato tracking-[0.04em] text-tinta">
-                        {f.nombreCorto}
+                      <span className="font-mono text-data tracking-[0.04em] text-ink">
+                        {f.shortName}
                       </span>
                     </Td>
                     <Td>
-                      <span className="block max-w-[26rem] truncate text-tinta-2" title={f.nombre}>
-                        {f.nombre}
+                      <span className="block max-w-[26rem] truncate text-ink-2" title={f.name}>
+                        {f.name}
                       </span>
                     </Td>
                     <Td>
-                      <span className="whitespace-nowrap text-tinta-2">
-                        {TIPO_TERMINAL[f.tipo] ?? f.tipo}
+                      <span className="whitespace-nowrap text-ink-2">
+                        {STATION_TYPE_LABELS[f.type] ?? f.type}
                       </span>
                     </Td>
                     <Td>
-                      <span className="whitespace-nowrap text-tinta-2">
-                        {f.estado ?? <span className="text-tinta-4">{SIN_DATO}</span>}
+                      <span className="whitespace-nowrap text-ink-2">
+                        {f.state ?? <span className="text-ink-4">{NO_DATA}</span>}
                       </span>
                     </Td>
                     <Td>
-                      <Resumen
-                        valores={f.servicios.map((s) => `${s.numero} · ${s.nombreCorto}`)}
-                        vacio="Sin servicios asociados"
+                      <Summary
+                        values={f.services.map((s) => `${s.number} · ${s.shortName}`)}
+                        empty="Sin servicios asociados"
                       />
                     </Td>
                     <Td>
-                      <Resumen
-                        valores={f.empresas.map((e) => e.nombreCorto)}
-                        vacio="Sin empresa deducible: la terminal no tiene servicios"
+                      <Summary
+                        values={f.companies.map((e) => e.shortName)}
+                        empty="Sin empresa deducible: la terminal no tiene servicios"
                       />
                     </Td>
                     <Td>
-                      <SelloActividad activa={f.activa} eliminada={f.baja} />
+                      <ActivityStamp active={f.isActive} deleted={f.isDeleted} />
                     </Td>
-                  </Fila>
+                  </TableRow>
                 ))}
-              </Cuerpo>
-            </Manifiesto>
+              </TableBody>
+            </Manifest>
           )}
 
-          <Paginacion
-            pagina={pagina}
-            porPagina={busqueda.porPagina}
+          <Pagination
+            page={page}
+            perPage={search.perPage}
             total={total}
-            sustantivo="terminales"
-            tamanos={[...TAMANOS]}
-            alCambiarPagina={(p) => cambiar({ pagina: p }, false)}
-            alCambiarTamano={(t) => cambiar({ porPagina: t })}
+            noun="terminales"
+            pageSizes={[...PAGE_SIZES]}
+            onPageChange={(p) => update({ page: p }, false)}
+            onPageSizeChange={(t) => update({ perPage: t })}
           />
-        </Hoja>
+        </Sheet>
       </div>
     </>
   )

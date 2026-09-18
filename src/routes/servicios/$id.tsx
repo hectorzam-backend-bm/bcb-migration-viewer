@@ -1,418 +1,418 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Clave, Dato, Hoja, Sello, SelloActividad } from '~/components/base'
-import { Encabezado, Miga, Migas, SeparadorMiga } from '~/components/cascaron'
-import { EstadoError, EstadoVacio, ManifiestoCargando } from '~/components/estados'
-import { Ficha, Pestana, Pestanas, Rejilla, Vinculo } from '~/components/ficha'
-import { BotonActualizar } from '~/components/actualizar'
+import { KeyText, Field, Sheet, Stamp, ActivityStamp } from '~/components/base'
+import { PageHeader, Breadcrumb, Breadcrumbs, BreadcrumbSeparator } from '~/components/shell'
+import { ErrorState, EmptyState, ManifestSkeleton } from '~/components/states'
+import { Card, Tab, Tabs, Grid, TextLink } from '~/components/card'
+import { RefreshButton } from '~/components/refresh'
 import {
-  Cabecera,
-  Cuerpo,
-  EnlaceDeFila,
-  Fila,
-  Manifiesto,
+  TableHead,
+  TableBody,
+  RowLink,
+  TableRow,
+  Manifest,
   Td,
   Th,
-} from '~/components/tabla'
-import { SIN_DATO, TIPO_TERMINAL, entero, fechaHora, moneda, porcentaje } from '~/lib/formato'
-import { limpiarBusqueda, unoDe } from '~/lib/parametros'
-import { obtenerServicio, type Servicio } from '~/server/servicios'
+} from '~/components/table'
+import { NO_DATA, STATION_TYPE_LABELS, integer, dateTime, currency, percent } from '~/lib/format'
+import { stripDefaults, oneOf } from '~/lib/params'
+import { getService, type ServiceDetail } from '~/server/services'
 
-const FICHAS = ['terminales', 'rutas', 'pasajeros'] as const
-type Solapa = (typeof FICHAS)[number]
-type BusquedaServicio = { ficha: Solapa }
+const TABS = ['stations', 'routes', 'passengers'] as const
+type TabId = (typeof TABS)[number]
+type ServiceDetailSearch = { tab: TabId }
 
-const POR_OMISION: BusquedaServicio = { ficha: 'terminales' }
+const DEFAULTS: ServiceDetailSearch = { tab: 'stations' }
 
 export const Route = createFileRoute('/servicios/$id')({
-  validateSearch: (entrada: Record<string, unknown>): BusquedaServicio => ({
-    ficha: unoDe(entrada.ficha, FICHAS, 'terminales'),
+  validateSearch: (input: Record<string, unknown>): ServiceDetailSearch => ({
+    tab: oneOf(input.tab, TABS, 'stations'),
   }),
-  loader: ({ params }) => obtenerServicio({ data: { id: params.id } }),
-  component: Pantalla,
+  loader: ({ params }) => getService({ data: { id: params.id } }),
+  component: Screen,
   pendingComponent: () => (
     <>
-      <Encabezado titulo="Servicio" renglon="Leyendo la ficha…" />
+      <PageHeader title="Servicio" subtitle="Leyendo la ficha…" />
       <div className="px-4 sm:px-8 py-6">
-        <Hoja className="overflow-hidden py-2">
-          <ManifiestoCargando columnas={[18, 26, 30, 14]} renglones={6} />
-        </Hoja>
+        <Sheet className="overflow-hidden py-2">
+          <ManifestSkeleton columns={[18, 26, 30, 14]} rows={6} />
+        </Sheet>
       </div>
     </>
   ),
   errorComponent: ({ error, reset }) => (
     <>
-      <Encabezado titulo="Servicio" renglon={SIN_DATO} />
-      <EstadoError
-        titulo="No fue posible leer la ficha del servicio"
-        detalle={error instanceof Error ? error.message : String(error)}
-        alReintentar={reset}
+      <PageHeader title="Servicio" subtitle={NO_DATA} />
+      <ErrorState
+        title="No fue posible leer la ficha del servicio"
+        detail={error instanceof Error ? error.message : String(error)}
+        onRetry={reset}
       />
     </>
   ),
 })
 
-function Pantalla() {
-  const datos = Route.useLoaderData()
-  const { ficha } = Route.useSearch()
+function Screen() {
+  const data = Route.useLoaderData()
+  const { tab } = Route.useSearch()
   const navigate = Route.useNavigate()
 
-  if (!datos.ok) {
+  if (!data.ok) {
     return (
       <>
-        <Encabezado
-          titulo="Servicio"
-          renglon={SIN_DATO}
-          migas={
-            <Migas>
-              <Miga to="/servicios">Servicios</Miga>
-            </Migas>
+        <PageHeader
+          title="Servicio"
+          subtitle={NO_DATA}
+          breadcrumbs={
+            <Breadcrumbs>
+              <Breadcrumb to="/servicios">Servicios</Breadcrumb>
+            </Breadcrumbs>
           }
         />
-        <EstadoError {...datos.falla} />
+        <ErrorState {...data.failure} />
       </>
     )
   }
 
-  const s = datos.servicio
+  const s = data.service
 
-  function alCambiarFicha(valor: string) {
+  function onTabChange(value: string) {
     navigate({
       search: () =>
-        limpiarBusqueda(
-          { ficha: unoDe(valor, FICHAS, 'terminales') },
-          POR_OMISION,
-        ) as BusquedaServicio,
+        stripDefaults(
+          { tab: oneOf(value, TABS, 'stations') },
+          DEFAULTS,
+        ) as ServiceDetailSearch,
       replace: true,
     })
   }
 
   return (
     <>
-      <Encabezado
-        migas={
-          <Migas>
-            <Miga to="/servicios">Servicios</Miga>
-            <SeparadorMiga />
-            <span className="text-tinta-2">{s.clave || SIN_DATO}</span>
-          </Migas>
+      <PageHeader
+        breadcrumbs={
+          <Breadcrumbs>
+            <Breadcrumb to="/servicios">Servicios</Breadcrumb>
+            <BreadcrumbSeparator />
+            <span className="text-ink-2">{s.key || NO_DATA}</span>
+          </Breadcrumbs>
         }
-        titulo={s.nombre}
-        renglon={
+        title={s.name}
+        subtitle={
           <>
-            {s.clave || SIN_DATO}
-            <span className="px-1.5 text-tinta-4">·</span>
-            No. {s.numero || SIN_DATO}
+            {s.key || NO_DATA}
+            <span className="px-1.5 text-ink-4">·</span>
+            No. {s.number || NO_DATA}
           </>
         }
-        acciones={
+        actions={
           <>
-            <SelloActividad activa={s.activo} eliminada={s.eliminado} />
-            {s.hcmDesactivado ? (
-              <Sello tono="aviso" titulo="hcmDisabled — marca informativa de la sincronización HCM">
+            <ActivityStamp active={s.isActive} deleted={s.isDeleted} />
+            {s.hcmDisabled ? (
+              <Stamp tone="warning" title="hcmDisabled — marca informativa de la sincronización HCM">
                 HCM
-              </Sello>
+              </Stamp>
             ) : null}
-            <span aria-hidden className="h-4 w-px bg-raya" />
-            <BotonActualizar />
+            <span aria-hidden className="h-4 w-px bg-rule" />
+            <RefreshButton />
           </>
         }
       />
 
       <div className="space-y-5 px-4 sm:px-8 py-6">
-        <Ficha titulo="Identificación">
-          <Rejilla columnas={2}>
-            <Dato rotulo="Clave servicio" mono>
-              {s.clave || SIN_DATO}
-            </Dato>
-            <Dato rotulo="No. servicio" mono>
-              {s.numero || SIN_DATO}
-            </Dato>
-            <Dato rotulo="Nombre del servicio" ancho>
-              {s.nombre || SIN_DATO}
-            </Dato>
-            <Dato rotulo="Nombre corto">{s.nombreCorto || SIN_DATO}</Dato>
-            <Dato rotulo="Cuenta" mono>
-              {s.cuenta ?? SIN_DATO}
-            </Dato>
-            <Dato rotulo="Estatus">
-              <SelloActividad activa={s.activo} eliminada={s.eliminado} />
-            </Dato>
-            <Dato rotulo="Despacho anticipado">
-              {s.despachoAnticipado ? 'Sí' : 'No'}
-            </Dato>
-          </Rejilla>
-        </Ficha>
+        <Card title="Identificación">
+          <Grid columns={2}>
+            <Field label="Clave servicio" mono>
+              {s.key || NO_DATA}
+            </Field>
+            <Field label="No. servicio" mono>
+              {s.number || NO_DATA}
+            </Field>
+            <Field label="Nombre del servicio" wide>
+              {s.name || NO_DATA}
+            </Field>
+            <Field label="Nombre corto">{s.shortName || NO_DATA}</Field>
+            <Field label="Cuenta" mono>
+              {s.account ?? NO_DATA}
+            </Field>
+            <Field label="Estatus">
+              <ActivityStamp active={s.isActive} deleted={s.isDeleted} />
+            </Field>
+            <Field label="Despacho anticipado">
+              {s.allowEarlyDispatch ? 'Sí' : 'No'}
+            </Field>
+          </Grid>
+        </Card>
 
         <div className="grid gap-5 lg:grid-cols-3">
-          <FichaEmpresa empresa={s.empresa} />
+          <CompanyDetail company={s.company} />
 
-          <Ficha titulo="Sincronización HCM" nota="informativo">
+          <Card title="Sincronización HCM" note="informativo">
             <div className="space-y-5">
-              <Dato rotulo="Marca HCM">
-                {s.hcmDesactivado ? (
-                  <Sello tono="aviso">Inhabilitado por HCM</Sello>
+              <Field label="Marca HCM">
+                {s.hcmDisabled ? (
+                  <Stamp tone="warning">Inhabilitado por HCM</Stamp>
                 ) : (
-                  <span className="text-tinta-2">Sin marca</span>
+                  <span className="text-ink-2">Sin marca</span>
                 )}
-              </Dato>
-              <Dato rotulo="Última corrida vista" mono>
-                {s.hcmUltimaCorrida ?? SIN_DATO}
-              </Dato>
-              <Dato rotulo="Origen del registro">
-                {s.hcmUltimaCorrida === null ? 'Alta manual' : 'Gestionado por HCM'}
-              </Dato>
+              </Field>
+              <Field label="Última corrida vista" mono>
+                {s.hcmLastRunId ?? NO_DATA}
+              </Field>
+              <Field label="Origen del registro">
+                {s.hcmLastRunId === null ? 'Alta manual' : 'Gestionado por HCM'}
+              </Field>
             </div>
-            <p className="mt-6 text-nota leading-relaxed text-tinta-3">
+            <p className="mt-6 text-note leading-relaxed text-ink-3">
               Estas marcas son informativas: no alteran el funcionamiento del sistema.
             </p>
-          </Ficha>
+          </Card>
 
-          <Ficha titulo="Rastro">
+          <Card title="Rastro">
             <div className="space-y-5">
-              <Dato rotulo="Creado" mono>
-                {fechaHora(s.creado)}
-              </Dato>
-              <Dato rotulo="Actualizado" mono>
-                {fechaHora(s.actualizado)}
-              </Dato>
-              <Dato rotulo="Dado de baja" mono>
-                {s.dadoDeBaja ? (
-                  <span className="text-oxido">{fechaHora(s.dadoDeBaja)}</span>
+              <Field label="Creado" mono>
+                {dateTime(s.createdAt)}
+              </Field>
+              <Field label="Actualizado" mono>
+                {dateTime(s.updatedAt)}
+              </Field>
+              <Field label="Dado de baja" mono>
+                {s.deletedAt ? (
+                  <span className="text-rust">{dateTime(s.deletedAt)}</span>
                 ) : (
-                  SIN_DATO
+                  NO_DATA
                 )}
-              </Dato>
-              <Dato rotulo="Identificador" mono>
-                <span className="break-all text-tinta-2">{s.id}</span>
-              </Dato>
+              </Field>
+              <Field label="Identificador" mono>
+                <span className="break-all text-ink-2">{s.id}</span>
+              </Field>
             </div>
-          </Ficha>
+          </Card>
         </div>
 
-        <Hoja className="overflow-hidden">
-          <Pestanas
-            valor={ficha}
-            alCambiar={alCambiarFicha}
-            opciones={[
-              { valor: 'terminales', rotulo: 'Terminales', conteo: s.terminales.length },
-              { valor: 'rutas', rotulo: 'Rutas', conteo: s.rutas.length },
+        <Sheet className="overflow-hidden">
+          <Tabs
+            value={tab}
+            onChange={onTabChange}
+            options={[
+              { value: 'stations', label: 'Terminales', count: s.stations.length },
+              { value: 'routes', label: 'Rutas', count: s.routes.length },
               {
-                valor: 'pasajeros',
-                rotulo: 'Tipos de pasajero',
-                conteo: s.tiposDePasajero.length,
+                value: 'passengers',
+                label: 'Tipos de pasajero',
+                count: s.passengerTypes.length,
               },
             ]}
           >
-            <Pestana valor="terminales">
-              <TablaTerminales terminales={s.terminales} />
-            </Pestana>
-            <Pestana valor="rutas">
-              <TablaRutas rutas={s.rutas} />
-            </Pestana>
-            <Pestana valor="pasajeros">
-              <TablaPasajeros tipos={s.tiposDePasajero} />
-            </Pestana>
-          </Pestanas>
-        </Hoja>
+            <Tab value="stations">
+              <StationsTable stations={s.stations} />
+            </Tab>
+            <Tab value="routes">
+              <RoutesTable routes={s.routes} />
+            </Tab>
+            <Tab value="passengers">
+              <PassengersTable types={s.passengerTypes} />
+            </Tab>
+          </Tabs>
+        </Sheet>
       </div>
     </>
   )
 }
 
-/* ── Empresa ───────────────────────────────────────────────────────────────
-   El cruce importa más que el dato: la clave y el nombre comercial llevan al
-   expediente de la empresa. El sello sólo aparece si la empresa es anómala. */
-function FichaEmpresa({ empresa }: { empresa: Servicio['empresa'] }) {
-  const anomala = empresa.eliminada || !empresa.activa
+/* ── Company ───────────────────────────────────────────────────────────────
+   The cross-reference matters more than the field: the key and the trade name
+   lead to the company's record. The stamp only shows if the company is anomalous. */
+function CompanyDetail({ company }: { company: ServiceDetail['company'] }) {
+  const isAnomalous = company.isDeleted || !company.isActive
 
   return (
-    <Ficha titulo="Empresa">
+    <Card title="Empresa">
       <div className="space-y-5">
-        <Dato rotulo="Clave">
-          <Vinculo to="/empresas/$id" params={{ id: empresa.id }}>
-            <Clave enfasis>{empresa.clave || SIN_DATO}</Clave>
-          </Vinculo>
-        </Dato>
-        <Dato rotulo="Nombre comercial">
+        <Field label="Clave">
+          <TextLink to="/empresas/$id" params={{ id: company.id }}>
+            <KeyText emphasis>{company.key || NO_DATA}</KeyText>
+          </TextLink>
+        </Field>
+        <Field label="Nombre comercial">
           <span className="flex flex-wrap items-center gap-2">
-            <Vinculo to="/empresas/$id" params={{ id: empresa.id }}>
-              {empresa.nombreComercial || empresa.nombreCorto || SIN_DATO}
-            </Vinculo>
-            {anomala ? (
-              <SelloActividad activa={empresa.activa} eliminada={empresa.eliminada} />
+            <TextLink to="/empresas/$id" params={{ id: company.id }}>
+              {company.tradeName || company.shortName || NO_DATA}
+            </TextLink>
+            {isAnomalous ? (
+              <ActivityStamp active={company.isActive} deleted={company.isDeleted} />
             ) : null}
           </span>
-        </Dato>
-        <Dato rotulo="Razón social">
-          <span className="text-tinta-2">{empresa.razonSocial || SIN_DATO}</span>
-        </Dato>
+        </Field>
+        <Field label="Razón social">
+          <span className="text-ink-2">{company.legalName || NO_DATA}</span>
+        </Field>
       </div>
-    </Ficha>
+    </Card>
   )
 }
 
-/* ── Pestañas ──────────────────────────────────────────────────────────── */
+/* ── Tabs ──────────────────────────────────────────────────────────────── */
 
-function TablaTerminales({ terminales }: { terminales: Servicio['terminales'] }) {
-  if (terminales.length === 0) {
+function StationsTable({ stations }: { stations: ServiceDetail['stations'] }) {
+  if (stations.length === 0) {
     return (
-      <EstadoVacio
-        titulo="Sin terminales asociadas"
-        detalle="Este servicio no tiene ninguna terminal ligada en la base migrada."
+      <EmptyState
+        title="Sin terminales asociadas"
+        detail="Este servicio no tiene ninguna terminal ligada en la base migrada."
       />
     )
   }
 
   return (
-    <Manifiesto etiqueta="Terminales del servicio">
-      <Cabecera>
-        <Th numerica>Número</Th>
+    <Manifest label="Terminales del servicio">
+      <TableHead>
+        <Th numeric>Número</Th>
         <Th>Nombre corto</Th>
         <Th>Nombre</Th>
         <Th>Tipo</Th>
         <Th>Estado</Th>
         <Th>Estatus</Th>
-      </Cabecera>
-      <Cuerpo>
-        {terminales.map((t) => (
-          <Fila key={t.id} atenuada={t.eliminada}>
-            <Td numerica>
-              <EnlaceDeFila to="/terminales/$id" params={{ id: t.id }}>
-                <Clave enfasis>{t.numero || SIN_DATO}</Clave>
-              </EnlaceDeFila>
+      </TableHead>
+      <TableBody>
+        {stations.map((t) => (
+          <TableRow key={t.id} dimmed={t.isDeleted}>
+            <Td numeric>
+              <RowLink to="/terminales/$id" params={{ id: t.id }}>
+                <KeyText emphasis>{t.number || NO_DATA}</KeyText>
+              </RowLink>
             </Td>
-            <Td className="text-tinta-2">{t.nombreCorto || SIN_DATO}</Td>
+            <Td className="text-ink-2">{t.shortName || NO_DATA}</Td>
             <Td>
-              <span className="block max-w-[24rem] truncate" title={t.nombre}>
-                {t.nombre || SIN_DATO}
+              <span className="block max-w-[24rem] truncate" title={t.name}>
+                {t.name || NO_DATA}
               </span>
             </Td>
-            <Td className="text-tinta-2">{TIPO_TERMINAL[t.tipo] ?? t.tipo ?? SIN_DATO}</Td>
-            <Td className="text-tinta-2">{t.estado || SIN_DATO}</Td>
+            <Td className="text-ink-2">{STATION_TYPE_LABELS[t.type] ?? t.type ?? NO_DATA}</Td>
+            <Td className="text-ink-2">{t.state || NO_DATA}</Td>
             <Td>
-              <SelloActividad activa={t.activa} eliminada={t.eliminada} />
+              <ActivityStamp active={t.isActive} deleted={t.isDeleted} />
             </Td>
-          </Fila>
+          </TableRow>
         ))}
-      </Cuerpo>
-    </Manifiesto>
+      </TableBody>
+    </Manifest>
   )
 }
 
-function TablaRutas({ rutas }: { rutas: Servicio['rutas'] }) {
-  if (rutas.length === 0) {
+function RoutesTable({ routes }: { routes: ServiceDetail['routes'] }) {
+  if (routes.length === 0) {
     return (
-      <EstadoVacio
-        titulo="Sin rutas registradas"
-        detalle="Este servicio no tiene ninguna ruta ligada en la base migrada."
+      <EmptyState
+        title="Sin rutas registradas"
+        detail="Este servicio no tiene ninguna ruta ligada en la base migrada."
       />
     )
   }
 
   return (
-    <Manifiesto etiqueta="Rutas del servicio">
-      <Cabecera>
-        <Th numerica>Número</Th>
+    <Manifest label="Rutas del servicio">
+      <TableHead>
+        <Th numeric>Número</Th>
         <Th>Nombre</Th>
         <Th>Origen → destino</Th>
-        <Th numerica>Tramos</Th>
-        <Th numerica>Tarifa sencilla</Th>
+        <Th numeric>Tramos</Th>
+        <Th numeric>Tarifa sencilla</Th>
         <Th>Estatus</Th>
-      </Cabecera>
-      <Cuerpo>
-        {rutas.map((r) => (
-          <Fila key={r.id} atenuada={r.eliminada}>
-            <Td numerica>
-              <EnlaceDeFila to="/rutas/$id" params={{ id: r.id }}>
-                <Clave enfasis>{r.numero || SIN_DATO}</Clave>
-              </EnlaceDeFila>
+      </TableHead>
+      <TableBody>
+        {routes.map((r) => (
+          <TableRow key={r.id} dimmed={r.isDeleted}>
+            <Td numeric>
+              <RowLink to="/rutas/$id" params={{ id: r.id }}>
+                <KeyText emphasis>{r.number || NO_DATA}</KeyText>
+              </RowLink>
             </Td>
             <Td>
-              <span className="block max-w-[22rem] truncate" title={r.nombre}>
-                {r.nombre || SIN_DATO}
+              <span className="block max-w-[22rem] truncate" title={r.name}>
+                {r.name || NO_DATA}
               </span>
             </Td>
             <Td>
-              <span className="font-mono text-dato text-tinta-2">
-                {r.origen || SIN_DATO}
-                <span className="px-1.5 text-tinta-4">→</span>
-                {r.destino || SIN_DATO}
+              <span className="font-mono text-data text-ink-2">
+                {r.origin || NO_DATA}
+                <span className="px-1.5 text-ink-4">→</span>
+                {r.destination || NO_DATA}
               </span>
             </Td>
-            <Td numerica>
-              <span className={r.tramos === 0 ? 'text-tinta-4' : undefined}>
-                {entero(r.tramos)}
+            <Td numeric>
+              <span className={r.segments === 0 ? 'text-ink-4' : undefined}>
+                {integer(r.segments)}
               </span>
             </Td>
-            <Td numerica>{moneda(r.tarifaSencilla)}</Td>
+            <Td numeric>{currency(r.priceOneWay)}</Td>
             <Td>
-              <SelloActividad activa={r.activa} eliminada={r.eliminada} />
+              <ActivityStamp active={r.isActive} deleted={r.isDeleted} />
             </Td>
-          </Fila>
+          </TableRow>
         ))}
-      </Cuerpo>
-    </Manifiesto>
+      </TableBody>
+    </Manifest>
   )
 }
 
-function TablaPasajeros({ tipos }: { tipos: Servicio['tiposDePasajero'] }) {
-  if (tipos.length === 0) {
+function PassengersTable({ types }: { types: ServiceDetail['passengerTypes'] }) {
+  if (types.length === 0) {
     return (
-      <EstadoVacio
-        titulo="Sin tipos de pasajero asignados"
-        detalle="Este servicio no tiene ningún tipo de pasajero ligado en la base migrada."
+      <EmptyState
+        title="Sin tipos de pasajero asignados"
+        detail="Este servicio no tiene ningún tipo de pasajero ligado en la base migrada."
       />
     )
   }
 
   return (
-    <Manifiesto etiqueta="Tipos de pasajero del servicio">
-      <Cabecera>
+    <Manifest label="Tipos de pasajero del servicio">
+      <TableHead>
         <Th>Clave</Th>
         <Th>Nombre</Th>
-        <Th numerica>Descuento</Th>
-        <Th numerica>Límite de asientos</Th>
+        <Th numeric>Descuento</Th>
+        <Th numeric>Límite de asientos</Th>
         <Th>Documento requerido</Th>
         <Th>Estatus</Th>
-      </Cabecera>
-      <Cuerpo>
-        {tipos.map((p) => (
-          <Fila key={p.id} atenuada={p.eliminado}>
+      </TableHead>
+      <TableBody>
+        {types.map((p) => (
+          <TableRow key={p.id} dimmed={p.isDeleted}>
             <Td>
-              <Clave enfasis>{p.clave || SIN_DATO}</Clave>
+              <KeyText emphasis>{p.key || NO_DATA}</KeyText>
             </Td>
             <Td>
-              <span className="block max-w-[22rem] truncate" title={p.descripcion ?? p.nombre}>
-                {p.nombre || SIN_DATO}
+              <span className="block max-w-[22rem] truncate" title={p.description ?? p.name}>
+                {p.name || NO_DATA}
               </span>
             </Td>
-            <Td numerica>
-              <span className={p.descuento === 0 ? 'text-tinta-4' : undefined}>
-                {porcentaje(p.descuento)}
+            <Td numeric>
+              <span className={p.discountPercent === 0 ? 'text-ink-4' : undefined}>
+                {percent(p.discountPercent)}
               </span>
             </Td>
-            <Td numerica>
-              {p.limiteAsientos === null ? (
-                <span className="text-tinta-4" title="Sin límite">
-                  {SIN_DATO}
+            <Td numeric>
+              {p.seatingLimit === null ? (
+                <span className="text-ink-4" title="Sin límite">
+                  {NO_DATA}
                 </span>
               ) : (
-                entero(p.limiteAsientos)
+                integer(p.seatingLimit)
               )}
             </Td>
-            <Td className="text-tinta-2">
-              {p.documentoRequerido
-                ? p.tipoDeDocumento
-                  ? `Sí · ${p.tipoDeDocumento}`
+            <Td className="text-ink-2">
+              {p.requiredDocument
+                ? p.documentType
+                  ? `Sí · ${p.documentType}`
                   : 'Sí'
                 : 'No'}
             </Td>
             <Td>
-              <SelloActividad activa={p.activo} eliminada={p.eliminado} />
+              <ActivityStamp active={p.isActive} deleted={p.isDeleted} />
             </Td>
-          </Fila>
+          </TableRow>
         ))}
-      </Cuerpo>
-    </Manifiesto>
+      </TableBody>
+    </Manifest>
   )
 }
