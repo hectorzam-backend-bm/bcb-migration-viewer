@@ -30,13 +30,19 @@ No hay migraciones en este repo. `prisma generate` es lo único que se ejecuta; 
 | **pnpm** | gestor de paquetes |
 | **TanStack Start** | framework full-stack; las consultas corren en funciones de servidor |
 | **TanStack Router** | rutas por archivo y, sobre todo, **el estado de la vista en la URL** |
+| **TanStack Table v9** | modelo de columnas de cada manifiesto — en modo manual, ver abajo |
 | **Prisma 7** | acceso a datos, con el adaptador `@prisma/adapter-pg` |
 | **Tailwind v4** | estilos, sobre tokens semánticos definidos en `src/styles/app.css` |
 | **Radix UI** | primitivas sin estilo para popover, pestañas y diálogo |
 
-No se usa TanStack Table: la paginación, el orden y el filtrado se resuelven en Postgres y el estado
-vive en los parámetros de la URL, así que la tabla es marcado semántico y nada más. Tampoco se usa
-React Query: las cargas pasan por los `loader` del router.
+TanStack Table corre en **modo manual**: la paginación, el orden y el filtrado se siguen resolviendo
+en Postgres y el estado sigue viviendo en los parámetros de la URL — eso no cambió. Lo que la
+librería aporta es el modelo de columnas: cada manifiesto declara sus columnas una sola vez
+(`src/routes/<catálogo>/columns.tsx`), y de ahí salen el encabezado, la celda, el afijo de orden y el
+ancho del esqueleto de carga, en vez de mantenerlos sincronizados a mano en tres lugares. El puente
+entre la URL y la tabla vive en `src/lib/table-state.ts`; el renderizador compartido, en
+`src/components/data-table.tsx`. Tampoco se usa React Query: las cargas pasan por los `loader` del
+router.
 
 ### El estado vive en la URL
 
@@ -86,8 +92,13 @@ src/
     db.ts                   cliente Prisma de sólo lectura + traducción de fallas
     <sección>.ts            funciones de servidor por catálogo
   routes/                   rutas por archivo de TanStack Router
-  components/               primitivas compartidas de interfaz
-  lib/                      formateadores y validadores de parámetros de URL
+    <catálogo>/columns.tsx  columnas de TanStack Table de ese manifiesto
+  components/
+    table.tsx               vocabulario visual: Th, Td, TableRow, RowLink, Pagination…
+    data-table.tsx           capa de instancia de tabla: DataTable, HeaderCell, features
+  lib/
+    table-state.ts          puente entre los parámetros de la URL y la tabla
+    format.ts, params.ts    formateadores y validadores de parámetros de URL
 .interface-design/system.md el sistema de diseño, escrito
 ```
 

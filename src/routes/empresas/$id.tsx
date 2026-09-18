@@ -1,20 +1,48 @@
 import { createFileRoute, notFound } from '@tanstack/react-router'
+import { createColumnHelper, useTable } from '@tanstack/react-table'
 import { Stat, KeyText, Field, Sheet, Rule, Stamp, ActivityStamp } from '~/components/base'
 import { PageHeader, Breadcrumb, Breadcrumbs, BreadcrumbSeparator } from '~/components/shell'
 import { SkeletonBar, ErrorState, EmptyState } from '~/components/states'
 import { Card, Grid, TextLink } from '~/components/card'
 import { RefreshButton } from '~/components/refresh'
-import {
-  TableHead,
-  TableBody,
-  RowLink,
-  TableRow,
-  Manifest,
-  Td,
-  Th,
-} from '~/components/table'
+import { RowLink } from '~/components/table'
+import { DataTable, features } from '~/components/data-table'
 import { NO_DATA, integer, dateTime, plural } from '~/lib/format'
-import { getCompany } from '~/server/companies'
+import { getCompany, type CompanyService } from '~/server/companies'
+
+const serviceHelper = createColumnHelper<typeof features, CompanyService>()
+
+const serviceColumns = serviceHelper.columns([
+  serviceHelper.accessor('key', {
+    header: 'Clave',
+    cell: ({ row, getValue }) => (
+      <RowLink to="/servicios/$id" params={{ id: row.original.id }} className="inline-block">
+        <KeyText emphasis>{getValue()}</KeyText>
+      </RowLink>
+    ),
+  }),
+  serviceHelper.accessor('number', {
+    header: 'Número',
+    meta: { numeric: true, className: 'text-ink-2' },
+    cell: ({ getValue }) => getValue() || NO_DATA,
+  }),
+  serviceHelper.accessor('name', {
+    header: 'Nombre',
+    meta: { className: 'text-ink' },
+    cell: ({ getValue }) => getValue() || NO_DATA,
+  }),
+  serviceHelper.display({
+    id: 'status',
+    header: 'Estatus',
+    cell: ({ row }) => (
+      <ActivityStamp active={row.original.isActive} deleted={row.original.isDeleted} />
+    ),
+  }),
+])
+
+/** Stable empty fallback: a fresh `[]` on every render would invalidate the
+ *  table's data reference for nothing. */
+const NO_SERVICES: Array<CompanyService> = []
 
 /* ───────────────────────────────────────────────────────────────────────────
    Company card. The detail is worth what it links to: every service leads
@@ -90,6 +118,18 @@ function CardSkeleton() {
 
 function Screen() {
   const result = Route.useLoaderData()
+  const company = result.ok ? result.company : null
+
+  // Hooks run unconditionally, before the early returns below. No sorting,
+  // filtering or pagination here — `enableSorting: false` keeps the shared
+  // `features`' sort affordance from showing up on a table that has none.
+  const table = useTable({
+    features,
+    columns: serviceColumns,
+    data: company?.services ?? NO_SERVICES,
+    getRowId: (row) => row.id,
+    enableSorting: false,
+  })
 
   if (!result.ok) {
     return (
@@ -100,7 +140,6 @@ function Screen() {
     )
   }
 
-  const company = result.company
   if (!company) return null
 
   const deletedServices = company.services.filter((s) => s.isDeleted).length
@@ -259,39 +298,11 @@ function Screen() {
                 detail="No hay ningún registro de Service que apunte a esta empresa. En el sistema anterior la empresa existía, pero ningún servicio quedó ligado a ella."
               />
             ) : (
-              <Manifest label={`Servicios de ${company.tradeName}`}>
-                <TableHead>
-                  <Th>Clave</Th>
-                  <Th>Número</Th>
-                  <Th>Nombre</Th>
-                  <Th>Estatus</Th>
-                </TableHead>
-                <TableBody>
-                  {company.services.map((service) => (
-                    <TableRow key={service.id} dimmed={service.isDeleted}>
-                      <Td>
-                        <RowLink
-                          to="/servicios/$id"
-                          params={{ id: service.id }}
-                          className="inline-block"
-                        >
-                          <KeyText emphasis>{service.key}</KeyText>
-                        </RowLink>
-                      </Td>
-                      <Td numeric className="text-ink-2">
-                        {service.number || NO_DATA}
-                      </Td>
-                      <Td className="text-ink">{service.name || NO_DATA}</Td>
-                      <Td>
-                        <ActivityStamp
-                          active={service.isActive}
-                          deleted={service.isDeleted}
-                        />
-                      </Td>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Manifest>
+              <DataTable
+                table={table}
+                label={`Servicios de ${company.tradeName}`}
+                rowProps={(row) => ({ dimmed: row.original.isDeleted })}
+              />
             )}
           </div>
         </Card>

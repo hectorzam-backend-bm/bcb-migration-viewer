@@ -1,24 +1,18 @@
 import { useCallback } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
+import { useTable } from '@tanstack/react-table'
 import { Check } from 'lucide-react'
-import { KeyText, Sheet, ActivityStamp } from '~/components/base'
+import { Sheet } from '~/components/base'
 import { PageHeader } from '~/components/shell'
 import { ErrorState, EmptyState, ManifestSkeleton } from '~/components/states'
 import { FilterBar, SearchBox, ListFilter } from '~/components/filters'
 import { RefreshButton } from '~/components/refresh'
-import {
-  TableHead,
-  TableBody,
-  RowLink,
-  TableRow,
-  Manifest,
-  Pagination,
-  Td,
-  Th,
-  SortableTh,
-} from '~/components/table'
+import { Pagination } from '~/components/table'
+import { DataTable, features, skeletonWidths } from '~/components/data-table'
+import { stationColumns } from './columns'
+import { useUrlTableState } from '~/lib/table-state'
 import { cn } from '~/lib/cn'
-import { NO_DATA, STATION_TYPE_LABELS, plural } from '~/lib/format'
+import { STATION_TYPE_LABELS, plural } from '~/lib/format'
 import {
   DIRECTIONS,
   PAGE_SIZES,
@@ -36,6 +30,7 @@ import {
   STATION_SORTS,
   STATION_TYPES,
   listStations,
+  type StationRow,
   type StationSearch,
 } from '~/server/stations'
 
@@ -136,7 +131,7 @@ export const Route = createFileRoute('/terminales/')({
       <PageHeader title="Terminales" subtitle="Leyendo el catálogo…" />
       <div className="px-4 sm:px-8 py-6">
         <Sheet className="overflow-hidden py-2">
-          <ManifestSkeleton columns={[7, 12, 22, 8, 13, 16, 12, 8]} />
+          <ManifestSkeleton columns={skeletonWidths(stationColumns)} />
         </Sheet>
       </div>
     </>
@@ -193,40 +188,12 @@ function Checkbox({
   )
 }
 
-/** Up to two values in the row; the rest collapses into "+N" and lives in the title. */
-function Summary({ values, empty }: { values: Array<string>; empty: string }) {
-  if (values.length === 0) {
-    return (
-      <span className="text-ink-4" title={empty}>
-        {NO_DATA}
-      </span>
-    )
-  }
-  const visible = values.slice(0, 2)
-  const rest = values.length - visible.length
-  return (
-    <span className="flex items-center gap-2" title={values.join('\n')}>
-      {visible.map((v) => (
-        <span
-          key={v}
-          className="border-l border-rule pl-2 font-mono text-data whitespace-nowrap text-ink-2 first:border-l-0 first:pl-0"
-        >
-          {v}
-        </span>
-      ))}
-      {rest > 0 ? (
-        <span
-          data-numeric
-          className="shrink-0 rounded-chip bg-row px-1 font-mono text-note text-ink-3"
-        >
-          +{rest}
-        </span>
-      ) : null}
-    </span>
-  )
-}
-
 /* ── Screen ───────────────────────────────────────────────────────────────── */
+
+/** Stable empty fallbacks: a fresh `[]`/`{}` on every render would invalidate
+ *  the table's data reference, and the filter options, for nothing. */
+const NO_ROWS: Array<StationRow> = []
+const NO_OPTIONS = { companies: [], services: [], states: [] }
 
 function Screen() {
   const data = Route.useLoaderData()
@@ -259,6 +226,40 @@ function Screen() {
     search.status.length > 0 ||
     search.deleted
 
+  const rows = data.ok ? data.rows : NO_ROWS
+  const total = data.ok ? data.total : 0
+  const page = data.ok ? data.page : 1
+  const options = data.ok ? data.options : NO_OPTIONS
+
+  // Hooks run unconditionally, before the `!data.ok` early return below. The
+  // bridge's patch already carries the right `page` for every case (1 on a
+  // sort or page-size change, the target page otherwise), so `resetPage` is
+  // always turned off here — `update`'s own default would otherwise clobber
+  // a plain page change the same way the original `onPageChange` avoided it.
+  const { sorting, pagination, onSortingChange, onPaginationChange } = useUrlTableState({
+    sort: search.sort,
+    dir: search.dir,
+    page,
+    perPage: search.perPage,
+    onChange: (patch) => update(patch, false),
+  })
+
+  const table = useTable({
+    features,
+    columns: stationColumns,
+    data: rows,
+    getRowId: (row) => row.id,
+    manualSorting: true,
+    manualPagination: true,
+    rowCount: total,
+    enableSortingRemoval: false,
+    enableMultiSort: false,
+    sortDescFirst: false,
+    state: { sorting, pagination },
+    onSortingChange,
+    onPaginationChange,
+  })
+
   if (!data.ok) {
     return (
       <>
@@ -266,16 +267,6 @@ function Screen() {
         <ErrorState {...data.failure} />
       </>
     )
-  }
-
-  const { rows, total, page, options } = data
-
-  function onSort(field: string) {
-    const same = search.sort === field
-    update({
-      sort: oneOf(field, STATION_SORTS, 'number'),
-      dir: same && search.dir === 'asc' ? 'desc' : 'asc',
-    })
   }
 
   return (
@@ -368,102 +359,21 @@ function Screen() {
               />
             )
           ) : (
-            <Manifest label="Catálogo de terminales">
-              <TableHead>
-                <SortableTh
-                  field="number"
-                  currentSort={search.sort}
-                  direction={search.dir}
-                  onSort={onSort}
-                >
-                  No. terminal
-                </SortableTh>
-                <SortableTh
-                  field="shortName"
-                  currentSort={search.sort}
-                  direction={search.dir}
-                  onSort={onSort}
-                >
-                  Nombre corto
-                </SortableTh>
-                <SortableTh
-                  field="name"
-                  currentSort={search.sort}
-                  direction={search.dir}
-                  onSort={onSort}
-                >
-                  Nombre completo
-                </SortableTh>
-                <Th>Tipo</Th>
-                <SortableTh
-                  field="state"
-                  currentSort={search.sort}
-                  direction={search.dir}
-                  onSort={onSort}
-                >
-                  Estado
-                </SortableTh>
-                <Th>Servicios</Th>
-                <Th>Empresas</Th>
-                <Th>Estatus</Th>
-              </TableHead>
-              <TableBody>
-                {rows.map((f) => (
-                  <TableRow key={f.id} dimmed={f.isDeleted}>
-                    <Td>
-                      <RowLink to="/terminales/$id" params={{ id: f.id }}>
-                        <KeyText emphasis>{f.number}</KeyText>
-                      </RowLink>
-                    </Td>
-                    <Td>
-                      <span className="font-mono text-data tracking-[0.04em] text-ink">
-                        {f.shortName}
-                      </span>
-                    </Td>
-                    <Td>
-                      <span className="block max-w-[26rem] truncate text-ink-2" title={f.name}>
-                        {f.name}
-                      </span>
-                    </Td>
-                    <Td>
-                      <span className="whitespace-nowrap text-ink-2">
-                        {STATION_TYPE_LABELS[f.type] ?? f.type}
-                      </span>
-                    </Td>
-                    <Td>
-                      <span className="whitespace-nowrap text-ink-2">
-                        {f.state ?? <span className="text-ink-4">{NO_DATA}</span>}
-                      </span>
-                    </Td>
-                    <Td>
-                      <Summary
-                        values={f.services.map((s) => `${s.number} · ${s.shortName}`)}
-                        empty="Sin servicios asociados"
-                      />
-                    </Td>
-                    <Td>
-                      <Summary
-                        values={f.companies.map((e) => e.shortName)}
-                        empty="Sin empresa deducible: la terminal no tiene servicios"
-                      />
-                    </Td>
-                    <Td>
-                      <ActivityStamp active={f.isActive} deleted={f.isDeleted} />
-                    </Td>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Manifest>
+            <DataTable
+              table={table}
+              label="Catálogo de terminales"
+              rowProps={(row) => ({ dimmed: row.original.isDeleted })}
+            />
           )}
 
           <Pagination
-            page={page}
-            perPage={search.perPage}
-            total={total}
+            page={table.state.pagination.pageIndex + 1}
+            perPage={table.state.pagination.pageSize}
+            total={table.getRowCount()}
             noun="terminales"
             pageSizes={[...PAGE_SIZES]}
-            onPageChange={(p) => update({ page: p }, false)}
-            onPageSizeChange={(t) => update({ perPage: t })}
+            onPageChange={(p) => table.setPageIndex(p - 1)}
+            onPageSizeChange={(t) => table.setPageSize(t)}
           />
         </Sheet>
       </div>

@@ -1,31 +1,18 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { KeyText, Sheet, MainMark, ActivityStamp } from '~/components/base'
+import { useTable } from '@tanstack/react-table'
+import { Sheet } from '~/components/base'
 import { PageHeader } from '~/components/shell'
 import { ErrorState, EmptyState, ManifestSkeleton } from '~/components/states'
-import { Tab, Tabs, TextLink } from '~/components/card'
+import { Tab, Tabs } from '~/components/card'
 import type { Option } from '~/components/filters'
 import { FilterBar, SearchBox, ListFilter } from '~/components/filters'
 import { RefreshButton } from '~/components/refresh'
-import {
-  TableHead,
-  TableBody,
-  RowLink,
-  TableRow,
-  Manifest,
-  Pagination,
-  Td,
-  Th,
-  SortableTh,
-} from '~/components/table'
+import { Pagination } from '~/components/table'
+import { DataTable, features, skeletonWidths } from '~/components/data-table'
+import { routeColumns, segmentColumns } from './columns'
+import { useUrlTableState } from '~/lib/table-state'
 import { cn } from '~/lib/cn'
-import {
-  NO_DATA,
-  COLLECTION_TYPE_LABELS,
-  integer,
-  kilometers,
-  minutes,
-  currency,
-} from '~/lib/format'
+import { NO_DATA, COLLECTION_TYPE_LABELS, integer } from '~/lib/format'
 import {
   DIRECTIONS,
   PAGE_SIZES,
@@ -127,7 +114,7 @@ export const Route = createFileRoute('/rutas/')({
       <PageHeader title="Rutas y tramos" subtitle="Cargando…" />
       <div className="px-4 sm:px-8 py-6">
         <Sheet className="py-2">
-          <ManifestSkeleton columns={[6, 20, 10, 10, 18, 6, 10, 8]} />
+          <ManifestSkeleton columns={skeletonWidths(routeColumns)} />
         </Sheet>
       </div>
     </>
@@ -191,41 +178,12 @@ function Toggle({
   )
 }
 
-/** A pair of stations with the manifest arrow between them. */
-function StationPair({
-  origin,
-  destination,
-}: {
-  origin: { id: string; key: string; name: string }
-  destination: { id: string; key: string; name: string }
-}) {
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 whitespace-nowrap"
-      title={`${origin.name} → ${destination.name}`}
-    >
-      <TextLink to="/terminales/$id" params={{ id: origin.id }} className="relative">
-        <KeyText>{origin.key}</KeyText>
-      </TextLink>
-      <span aria-hidden className="text-ink-4">
-        →
-      </span>
-      <TextLink to="/terminales/$id" params={{ id: destination.id }} className="relative">
-        <KeyText>{destination.key}</KeyText>
-      </TextLink>
-    </span>
-  )
-}
-
-function YesNo({ value }: { value: boolean }) {
-  return (
-    <span className={cn('font-mono text-data', value ? 'text-ink-2' : 'text-ink-4')}>
-      {value ? 'Sí' : 'No'}
-    </span>
-  )
-}
-
 /* ── Screen ─────────────────────────────────────────────────────────────── */
+
+/** Stable empty fallbacks: a fresh `[]` on every render would invalidate the
+ *  inactive tab's table reference for nothing. */
+const NO_ROUTE_ROWS: Array<RouteRow> = []
+const NO_SEGMENT_ROWS: Array<SegmentRow> = []
 
 function Screen() {
   const data = Route.useLoaderData()
@@ -240,14 +198,6 @@ function Screen() {
         return stripDefaults(next, defaultSearch(next.view))
       },
       replace: true,
-    })
-  }
-
-  function sortBy(field: string) {
-    goTo({
-      sort: field,
-      dir: search.sort === field && search.dir === 'asc' ? 'desc' : 'asc',
-      page: 1,
     })
   }
 
@@ -266,6 +216,50 @@ function Screen() {
     })
   }
 
+  const routeRows = data.ok && data.view === 'routes' ? data.rows : NO_ROUTE_ROWS
+  const segmentRows = data.ok && data.view === 'segments' ? data.rows : NO_SEGMENT_ROWS
+  const total = data.ok ? data.total : 0
+
+  // Hooks run unconditionally, before the `!data.ok` early return below. Both
+  // tab tables share one URL-driven sort/page state — only one is ever
+  // rendered, but `useTable` still has to be called every render for each.
+  const { sorting, pagination, onSortingChange, onPaginationChange } = useUrlTableState({
+    sort: search.sort,
+    dir: search.dir,
+    page: search.page,
+    perPage: search.perPage,
+    onChange: goTo,
+  })
+
+  const manualTableOptions = {
+    manualSorting: true as const,
+    manualPagination: true as const,
+    enableSortingRemoval: false as const,
+    enableMultiSort: false as const,
+    sortDescFirst: false as const,
+    state: { sorting, pagination },
+    onSortingChange,
+    onPaginationChange,
+  }
+
+  const routesTable = useTable({
+    features,
+    columns: routeColumns,
+    data: routeRows,
+    getRowId: (row) => row.id,
+    rowCount: view === 'routes' ? total : 0,
+    ...manualTableOptions,
+  })
+
+  const segmentsTable = useTable({
+    features,
+    columns: segmentColumns,
+    data: segmentRows,
+    getRowId: (row) => row.id,
+    rowCount: view === 'segments' ? total : 0,
+    ...manualTableOptions,
+  })
+
   if (!data.ok) {
     return (
       <>
@@ -275,7 +269,8 @@ function Screen() {
     )
   }
 
-  const { counts, options, total } = data
+  const activeTable = data.view === 'routes' ? routesTable : segmentsTable
+  const { counts, options } = data
   const noun = view === 'routes' ? 'rutas' : 'tramos'
   const inCatalog = view === 'routes' ? counts.routes : counts.segments
 
@@ -451,209 +446,35 @@ function Screen() {
 
               {empty ??
                 (data.view === 'routes' ? (
-                  <RoutesTable
-                    rows={data.rows}
-                    sort={search.sort}
-                    dir={search.dir}
-                    onSort={sortBy}
+                  <DataTable
+                    table={routesTable}
+                    label="Rutas"
+                    rowProps={(row) => ({ dimmed: row.original.isDeleted })}
                   />
                 ) : (
-                  <SegmentsTable
-                    rows={data.rows}
-                    sort={search.sort}
-                    dir={search.dir}
-                    onSort={sortBy}
+                  <DataTable
+                    table={segmentsTable}
+                    label="Tramos"
+                    rowProps={(row) => ({
+                      highlighted: row.original.isMain,
+                      dimmed: row.original.isDeleted || !row.original.isActive,
+                    })}
                   />
                 ))}
 
               <Pagination
-                page={search.page}
-                perPage={search.perPage}
-                total={total}
+                page={activeTable.state.pagination.pageIndex + 1}
+                perPage={activeTable.state.pagination.pageSize}
+                total={activeTable.getRowCount()}
                 noun={noun}
                 pageSizes={[...PAGE_SIZES]}
-                onPageChange={(page) => goTo({ page })}
-                onPageSizeChange={(perPage) => goTo({ perPage, page: 1 })}
+                onPageChange={(page) => activeTable.setPageIndex(page - 1)}
+                onPageSizeChange={(perPage) => activeTable.setPageSize(perPage)}
               />
             </Tab>
           </Tabs>
         </Sheet>
       </div>
     </>
-  )
-}
-
-/* ── Routes manifest ────────────────────────────────────────────────────── */
-
-type SortProps = {
-  sort: string
-  dir: 'asc' | 'desc'
-  onSort: (field: string) => void
-}
-
-function RoutesTable({ rows, sort, dir, onSort }: SortProps & { rows: Array<RouteRow> }) {
-  const common = { currentSort: sort, direction: dir, onSort }
-  return (
-    <Manifest label="Rutas">
-      <TableHead>
-        <SortableTh field="number" {...common}>
-          No.
-        </SortableTh>
-        <SortableTh field="name" {...common}>
-          Nombre
-        </SortableTh>
-        <SortableTh field="service" {...common}>
-          Servicio
-        </SortableTh>
-        <SortableTh field="company" {...common}>
-          Empresa
-        </SortableTh>
-        <Th>Origen → Destino</Th>
-        <SortableTh field="segments" numeric {...common}>
-          Tramos
-        </SortableTh>
-        <SortableTh field="price" numeric {...common}>
-          Tarifa sencilla
-        </SortableTh>
-        <SortableTh field="travelTime" numeric {...common}>
-          Tiempo
-        </SortableTh>
-        <SortableTh field="distance" numeric {...common}>
-          Distancia
-        </SortableTh>
-        <SortableTh field="status" {...common}>
-          Estatus
-        </SortableTh>
-      </TableHead>
-      <TableBody>
-        {rows.map((f) => (
-          <TableRow key={f.id} dimmed={f.isDeleted}>
-            <Td>
-              <RowLink to="/rutas/$id" params={{ id: f.id }}>
-                <KeyText emphasis>{f.number}</KeyText>
-              </RowLink>
-            </Td>
-            <Td className="max-w-[24rem] truncate text-ink">{f.name}</Td>
-            <Td>
-              <TextLink
-                to="/servicios/$id"
-                params={{ id: f.service.id }}
-                className="relative text-body text-ink-2"
-              >
-                {f.service.label}
-              </TextLink>
-            </Td>
-            <Td>
-              <TextLink
-                to="/empresas/$id"
-                params={{ id: f.company.id }}
-                className="relative text-body text-ink-2"
-              >
-                {f.company.label}
-              </TextLink>
-            </Td>
-            <Td>
-              <StationPair origin={f.origin} destination={f.destination} />
-            </Td>
-            <Td numeric className={f.segments === 0 ? 'text-amber' : undefined}>
-              {integer(f.segments)}
-            </Td>
-            <Td numeric>{currency(f.priceOneWay)}</Td>
-            <Td numeric className="text-ink-2">
-              {minutes(f.travelTimeMinutes)}
-            </Td>
-            <Td numeric className="text-ink-2">
-              {kilometers(f.distanceKm)}
-            </Td>
-            <Td>
-              <ActivityStamp active={f.isActive} deleted={f.isDeleted} />
-            </Td>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Manifest>
-  )
-}
-
-/* ── Flat segments manifest ─────────────────────────────────────────────── */
-
-function SegmentsTable({ rows, sort, dir, onSort }: SortProps & { rows: Array<SegmentRow> }) {
-  const common = { currentSort: sort, direction: dir, onSort }
-  return (
-    <Manifest label="Tramos">
-      <TableHead>
-        <SortableTh field="number" {...common}>
-          No.
-        </SortableTh>
-        <SortableTh field="route" {...common}>
-          Ruta
-        </SortableTh>
-        <Th>Origen → Destino</Th>
-        <SortableTh field="stayTime" numeric {...common}>
-          Estancia
-        </SortableTh>
-        <SortableTh field="duration" numeric {...common}>
-          Duración
-        </SortableTh>
-        <SortableTh field="distance" numeric {...common}>
-          Distancia
-        </SortableTh>
-        <SortableTh field="sale" {...common}>
-          Venta
-        </SortableTh>
-        <SortableTh field="price" numeric {...common}>
-          Tarifa sencilla
-        </SortableTh>
-        <SortableTh field="priceRound" numeric {...common}>
-          Tarifa redonda
-        </SortableTh>
-        <SortableTh field="main" {...common}>
-          Principal
-        </SortableTh>
-        <SortableTh field="status" {...common}>
-          Estatus
-        </SortableTh>
-      </TableHead>
-      <TableBody>
-        {rows.map((f) => (
-          <TableRow key={f.id} highlighted={f.isMain} dimmed={f.isDeleted || !f.isActive}>
-            <Td>
-              <KeyText emphasis>{f.number}</KeyText>
-            </Td>
-            <Td className="max-w-[22rem]">
-              <RowLink to="/rutas/$id" params={{ id: f.route.id }}>
-                <span className="inline-flex items-baseline gap-2">
-                  <KeyText emphasis>{f.route.number}</KeyText>
-                  <span className="truncate text-body text-ink-2">{f.route.name}</span>
-                </span>
-              </RowLink>
-            </Td>
-            <Td>
-              <StationPair origin={f.origin} destination={f.destination} />
-            </Td>
-            <Td numeric className="text-ink-2">
-              {minutes(f.stayTimeMinutes)}
-            </Td>
-            <Td numeric className="text-ink-2">
-              {minutes(f.durationMinutes)}
-            </Td>
-            <Td numeric className="text-ink-2">
-              {kilometers(f.distanceKm)}
-            </Td>
-            <Td>
-              <YesNo value={f.allowSale} />
-            </Td>
-            <Td numeric>{currency(f.priceOneWay)}</Td>
-            <Td numeric className="text-ink-2">
-              {currency(f.priceRound)}
-            </Td>
-            <Td>{f.isMain ? <MainMark /> : <span className="text-ink-4">{NO_DATA}</span>}</Td>
-            <Td>
-              <ActivityStamp active={f.isActive} deleted={f.isDeleted} />
-            </Td>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Manifest>
   )
 }

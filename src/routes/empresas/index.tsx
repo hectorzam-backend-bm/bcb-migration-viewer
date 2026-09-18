@@ -1,25 +1,17 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { useTable } from '@tanstack/react-table'
 import { Check } from 'lucide-react'
-import { KeyText, Stamp, ActivityStamp } from '~/components/base'
 import { PageHeader } from '~/components/shell'
 import { ErrorState, EmptyState, ManifestSkeleton } from '~/components/states'
 import { FilterBar, SearchBox, ListFilter } from '~/components/filters'
 import type { Option } from '~/components/filters'
-import { TextLink } from '~/components/card'
 import { RefreshButton } from '~/components/refresh'
-import {
-  TableHead,
-  TableBody,
-  RowLink,
-  TableRow,
-  Manifest,
-  Pagination,
-  Td,
-  Th,
-  SortableTh,
-} from '~/components/table'
+import { Pagination } from '~/components/table'
+import { DataTable, features, skeletonWidths } from '~/components/data-table'
+import { companyColumns } from './columns'
+import { useUrlTableState } from '~/lib/table-state'
 import { cn } from '~/lib/cn'
-import { NO_DATA, integer, plural } from '~/lib/format'
+import { NO_DATA, plural } from '~/lib/format'
 import {
   DIRECTIONS,
   bool,
@@ -40,6 +32,7 @@ import type {
   CompanyStatus,
   CompanySearch,
   CompanySource,
+  CompanyRow,
 } from '~/server/companies'
 
 /* ───────────────────────────────────────────────────────────────────────────
@@ -108,7 +101,7 @@ export const Route = createFileRoute('/empresas/')({
   loaderDeps: ({ search }) => withDefaults(search),
   loader: ({ deps }) => listCompanies({ data: deps }),
   component: Screen,
-  pendingComponent: () => <ManifestSkeleton columns={[9, 14, 22, 28, 8, 10]} />,
+  pendingComponent: () => <ManifestSkeleton columns={skeletonWidths(companyColumns)} />,
   errorComponent: ({ error, reset }) => (
     <ErrorState
       title="No fue posible leer el catálogo de empresas"
@@ -162,6 +155,10 @@ function Checkbox({
   )
 }
 
+/** Stable empty fallback: a fresh `[]` on every render would invalidate the
+ *  table's data reference for nothing. */
+const NO_ROWS: Array<CompanyRow> = []
+
 function Screen() {
   const result = Route.useLoaderData()
   const search = withDefaults(Route.useSearch())
@@ -175,13 +172,34 @@ function Screen() {
     })
   }
 
-  function sortBy(field: string) {
-    updateSearch({
-      sort: field as Search['sort'],
-      dir: search.sort === field && search.dir === 'asc' ? 'desc' : 'asc',
-      page: 1,
-    })
-  }
+  const rows = result.ok ? result.rows : NO_ROWS
+  const total = result.ok ? result.total : 0
+  const page = result.ok ? result.page : 1
+
+  // Hooks run unconditionally, before the `!result.ok` early return below.
+  const { sorting, pagination, onSortingChange, onPaginationChange } = useUrlTableState({
+    sort: search.sort,
+    dir: search.dir,
+    page,
+    perPage: search.perPage,
+    onChange: updateSearch,
+  })
+
+  const table = useTable({
+    features,
+    columns: companyColumns,
+    data: rows,
+    getRowId: (row) => row.id,
+    manualSorting: true,
+    manualPagination: true,
+    rowCount: total,
+    enableSortingRemoval: false, // asc → desc → asc, never unsorted
+    enableMultiSort: false, // one sort key, because the URL carries one
+    sortDescFirst: false, // parity, and avoids getAutoSortDir's getFilteredRowModel
+    state: { sorting, pagination },
+    onSortingChange,
+    onPaginationChange,
+  })
 
   const hasFilters =
     search.q.trim().length > 0 ||
@@ -197,8 +215,6 @@ function Screen() {
       </>
     )
   }
-
-  const { rows, total, page } = result
 
   return (
     <>
@@ -284,120 +300,21 @@ function Screen() {
               />
             )
           ) : (
-            <Manifest label="Empresas migradas">
-              <TableHead>
-                <SortableTh
-                  field="key"
-                  currentSort={search.sort}
-                  direction={search.dir}
-                  onSort={sortBy}
-                >
-                  Clave
-                </SortableTh>
-                <SortableTh
-                  field="shortName"
-                  currentSort={search.sort}
-                  direction={search.dir}
-                  onSort={sortBy}
-                >
-                  Nombre corto
-                </SortableTh>
-                <SortableTh
-                  field="tradeName"
-                  currentSort={search.sort}
-                  direction={search.dir}
-                  onSort={sortBy}
-                >
-                  Nombre comercial
-                </SortableTh>
-                <Th>Razón social</Th>
-                <SortableTh
-                  field="services"
-                  numeric
-                  currentSort={search.sort}
-                  direction={search.dir}
-                  onSort={sortBy}
-                >
-                  Servicios
-                </SortableTh>
-                <Th>Estatus</Th>
-              </TableHead>
-
-              <TableBody>
-                {rows.map((row) => (
-                  <TableRow key={row.id} dimmed={row.isDeleted}>
-                    <Td>
-                      <RowLink
-                        to="/empresas/$id"
-                        params={{ id: row.id }}
-                        className="inline-block"
-                      >
-                        <KeyText emphasis>{row.key}</KeyText>
-                      </RowLink>
-                    </Td>
-                    <Td className="text-ink-2">{row.shortName || NO_DATA}</Td>
-                    <Td className="text-ink">
-                      {/* The truncation goes on a span: with `table-layout: auto`
-                          a max-width on the cell is only a suggestion. */}
-                      <span className="block max-w-[20rem] truncate">
-                        {row.tradeName || NO_DATA}
-                      </span>
-                    </Td>
-                    <Td className="text-ink-3">
-                      <span
-                        className="block max-w-[22rem] truncate"
-                        title={row.legalName}
-                      >
-                        {row.legalName || NO_DATA}
-                      </span>
-                    </Td>
-                    <Td numeric>
-                      {row.services === 0 ? (
-                        // Zero is a value, not an absence: it is printed, dimmed
-                        // and without a link. `—` would mean "unknown".
-                        <span className="text-ink-4">{integer(0)}</span>
-                      ) : (
-                        // Above the link that covers the row: crossing into the
-                        // services catalog is what the viewer is worth.
-                        <TextLink
-                          to="/servicios"
-                          search={{ company: [row.id] }}
-                          className="relative z-10 text-ink"
-                        >
-                          {integer(row.services)}
-                        </TextLink>
-                      )}
-                    </Td>
-                    <Td>
-                      <span className="flex items-center gap-2">
-                        <ActivityStamp
-                          active={row.isActive}
-                          deleted={row.isDeleted}
-                        />
-                        {row.hcmDisabled ? (
-                          <Stamp
-                            tone="warning"
-                            title="HCM la reportó ausente o con estatus N. Es meramente informativo: no afecta el funcionamiento del sistema."
-                          >
-                            HCM
-                          </Stamp>
-                        ) : null}
-                      </span>
-                    </Td>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Manifest>
+            <DataTable
+              table={table}
+              label="Empresas migradas"
+              rowProps={(row) => ({ dimmed: row.original.isDeleted })}
+            />
           )}
 
           {rows.length > 0 ? (
             <Pagination
-              page={page}
-              perPage={search.perPage}
-              total={total}
+              page={table.state.pagination.pageIndex + 1}
+              perPage={table.state.pagination.pageSize}
+              total={table.getRowCount()}
               noun="empresas"
-              onPageChange={(p) => updateSearch({ page: p })}
-              onPageSizeChange={(t) => updateSearch({ perPage: t, page: 1 })}
+              onPageChange={(p) => table.setPageIndex(p - 1)}
+              onPageSizeChange={(t) => table.setPageSize(t)}
             />
           ) : null}
         </div>

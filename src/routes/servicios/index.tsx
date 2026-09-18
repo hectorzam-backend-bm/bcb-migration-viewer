@@ -1,22 +1,15 @@
 import { useCallback } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { KeyText, Sheet, Stamp, ActivityStamp } from '~/components/base'
+import { useTable } from '@tanstack/react-table'
+import { Sheet } from '~/components/base'
 import { PageHeader } from '~/components/shell'
 import { ErrorState, EmptyState, ManifestSkeleton } from '~/components/states'
-import { TextLink } from '~/components/card'
 import { FilterBar, SearchBox, ListFilter } from '~/components/filters'
 import { RefreshButton } from '~/components/refresh'
-import {
-  TableHead,
-  TableBody,
-  RowLink,
-  TableRow,
-  Manifest,
-  Pagination,
-  Td,
-  Th,
-  SortableTh,
-} from '~/components/table'
+import { Pagination } from '~/components/table'
+import { DataTable, features, skeletonWidths } from '~/components/data-table'
+import { serviceColumns } from './columns'
+import { useUrlTableState } from '~/lib/table-state'
 import { NO_DATA, integer } from '~/lib/format'
 import {
   DIRECTIONS,
@@ -29,10 +22,12 @@ import {
   text,
   oneOf,
 } from '~/lib/params'
-import { SERVICE_SORTS, listServices, type ServiceSearch } from '~/server/services'
-
-/* Skeleton widths: the same split as the manifest's eight columns. */
-const LOADING_COLUMNS = [9, 7, 24, 16, 15, 8, 7, 11]
+import {
+  SERVICE_SORTS,
+  listServices,
+  type ServiceRow,
+  type ServiceSearch,
+} from '~/server/services'
 
 const DEFAULTS: ServiceSearch = {
   q: '',
@@ -57,6 +52,10 @@ const EARLY_DISPATCH_OPTIONS = [
 ]
 
 const DELETED_OPTIONS = [{ value: 'include', label: 'Incluir servicios dados de baja' }]
+
+/** Stable empty fallback: a fresh `[]` on every render would invalidate the
+ *  table's data reference for nothing. */
+const NO_ROWS: Array<ServiceRow> = []
 
 /** Restores the default values that do not travel in the URL. */
 function withDefaults(s: Partial<ServiceSearch>): ServiceSearch {
@@ -88,7 +87,7 @@ export const Route = createFileRoute('/servicios/')({
       <PageHeader title="Servicios" subtitle="Leyendo el catálogo…" />
       <div className="px-4 sm:px-8 py-6">
         <Sheet className="overflow-hidden py-2">
-          <ManifestSkeleton columns={LOADING_COLUMNS} />
+          <ManifestSkeleton columns={skeletonWidths(serviceColumns)} />
         </Sheet>
       </div>
     </>
@@ -130,6 +129,37 @@ function Screen() {
 
   const onSearch = useCallback((q: string) => updateSearch({ q }), [updateSearch])
 
+  const rows = data.ok ? data.rows : NO_ROWS
+  const total = data.ok ? data.total : 0
+  const catalogTotal = data.ok ? data.catalogTotal : 0
+  const page = data.ok ? data.page : 1
+  const companies = data.ok ? data.companies : []
+
+  // Hooks run unconditionally, before the `!data.ok` early return below.
+  const { sorting, pagination, onSortingChange, onPaginationChange } = useUrlTableState({
+    sort: search.sort,
+    dir: search.dir,
+    page,
+    perPage: search.perPage,
+    onChange: updateSearch,
+  })
+
+  const table = useTable({
+    features,
+    columns: serviceColumns,
+    data: rows,
+    getRowId: (row) => row.id,
+    manualSorting: true,
+    manualPagination: true,
+    rowCount: total,
+    enableSortingRemoval: false,
+    enableMultiSort: false,
+    sortDescFirst: false,
+    state: { sorting, pagination },
+    onSortingChange,
+    onPaginationChange,
+  })
+
   if (!data.ok) {
     return (
       <>
@@ -138,8 +168,6 @@ function Screen() {
       </>
     )
   }
-
-  const { rows, total, catalogTotal, page, companies } = data
 
   const hasFilters =
     search.q.trim().length > 0 ||
@@ -152,13 +180,6 @@ function Screen() {
     total === catalogTotal
       ? `${integer(total)} servicios`
       : `${integer(total)} de ${integer(catalogTotal)} servicios`
-
-  function onSort(field: string) {
-    updateSearch({
-      sort: field as ServiceSearch['sort'],
-      dir: search.sort === field && search.dir === 'asc' ? 'desc' : 'asc',
-    })
-  }
 
   return (
     <>
@@ -246,118 +267,21 @@ function Screen() {
               />
             )
           ) : (
-            <Manifest label="Servicios migrados">
-              <TableHead>
-                <SortableTh
-                  field="key"
-                  currentSort={search.sort}
-                  direction={search.dir}
-                  onSort={onSort}
-                >
-                  Clave servicio
-                </SortableTh>
-                <SortableTh
-                  field="number"
-                  numeric
-                  currentSort={search.sort}
-                  direction={search.dir}
-                  onSort={onSort}
-                >
-                  No. servicio
-                </SortableTh>
-                <SortableTh
-                  field="name"
-                  currentSort={search.sort}
-                  direction={search.dir}
-                  onSort={onSort}
-                >
-                  Nombre del servicio
-                </SortableTh>
-                <Th>Nombre corto</Th>
-                <SortableTh
-                  field="company"
-                  currentSort={search.sort}
-                  direction={search.dir}
-                  onSort={onSort}
-                >
-                  Empresa
-                </SortableTh>
-                <Th numeric>Terminales</Th>
-                <SortableTh
-                  field="routes"
-                  numeric
-                  currentSort={search.sort}
-                  direction={search.dir}
-                  onSort={onSort}
-                >
-                  Rutas
-                </SortableTh>
-                <Th>Estatus</Th>
-              </TableHead>
-
-              <TableBody>
-                {rows.map((s) => (
-                  <TableRow key={s.id} dimmed={s.isDeleted}>
-                    <Td>
-                      <RowLink to="/servicios/$id" params={{ id: s.id }}>
-                        <KeyText emphasis>{s.key || NO_DATA}</KeyText>
-                      </RowLink>
-                    </Td>
-                    <Td numeric className="text-ink-2">
-                      {s.number || NO_DATA}
-                    </Td>
-                    <Td>
-                      <span className="block max-w-[26rem] truncate" title={s.name}>
-                        {s.name || NO_DATA}
-                      </span>
-                    </Td>
-                    <Td className="text-ink-2">{s.shortName || NO_DATA}</Td>
-                    <Td>
-                      <TextLink
-                        to="/empresas/$id"
-                        params={{ id: s.companyId }}
-                        className="relative z-10"
-                      >
-                        {s.companyName || s.companyKey || NO_DATA}
-                      </TextLink>
-                    </Td>
-                    <Td numeric>
-                      <span className={s.stations === 0 ? 'text-ink-4' : undefined}>
-                        {integer(s.stations)}
-                      </span>
-                    </Td>
-                    <Td numeric>
-                      <span className={s.routes === 0 ? 'text-ink-4' : undefined}>
-                        {integer(s.routes)}
-                      </span>
-                    </Td>
-                    <Td>
-                      <span className="flex items-center gap-2">
-                        <ActivityStamp active={s.isActive} deleted={s.isDeleted} />
-                        {s.hcmDisabled ? (
-                          <Stamp
-                            tone="warning"
-                            title="hcmDisabled — la sincronización HCM lo marcó como inhabilitado"
-                          >
-                            HCM
-                          </Stamp>
-                        ) : null}
-                      </span>
-                    </Td>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Manifest>
+            <DataTable
+              table={table}
+              label="Servicios migrados"
+              rowProps={(row) => ({ dimmed: row.original.isDeleted })}
+            />
           )}
 
           <Pagination
-            page={page}
-            perPage={search.perPage}
-            total={total}
+            page={table.state.pagination.pageIndex + 1}
+            perPage={table.state.pagination.pageSize}
+            total={table.getRowCount()}
             pageSizes={[...PAGE_SIZES]}
             noun="servicios"
-            onPageChange={(p) => updateSearch({ page: p })}
-            onPageSizeChange={(t) => updateSearch({ perPage: t })}
+            onPageChange={(p) => table.setPageIndex(p - 1)}
+            onPageSizeChange={(t) => table.setPageSize(t)}
           />
         </Sheet>
       </div>

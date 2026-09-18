@@ -1,6 +1,5 @@
 import type { ReactNode, TdHTMLAttributes, ThHTMLAttributes } from 'react'
 import {
-  ArrowUp,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -66,54 +65,6 @@ export function Th({
     >
       {children}
     </th>
-  )
-}
-
-/** Sorting header. The indicator only appears on the active column. */
-export function SortableTh({
-  children,
-  field,
-  currentSort,
-  direction,
-  onSort,
-  numeric,
-  className,
-}: {
-  children: ReactNode
-  field: string
-  currentSort: string
-  direction: 'asc' | 'desc'
-  onSort: (field: string) => void
-  numeric?: boolean
-  className?: string
-}) {
-  const active = currentSort === field
-  return (
-    <Th numeric={numeric} className={cn('p-0', className)} aria-sort={active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
-      <button
-        type="button"
-        onClick={() => onSort(field)}
-        className={cn(
-          'group flex w-full items-center gap-1.5 px-3 py-2.5 font-mono text-note font-medium tracking-[0.085em] uppercase transition-colors duration-100',
-          'hover:text-ink focus-visible:text-ink',
-          numeric && 'justify-end',
-          active ? 'text-ink' : 'text-ink-3',
-        )}
-      >
-        {children}
-        <ArrowUp
-          size={11}
-          strokeWidth={2.25}
-          aria-hidden
-          className={cn(
-            'shrink-0 transition-[opacity,transform] duration-150',
-            active
-              ? cn('opacity-100', direction === 'desc' && 'rotate-180')
-              : 'opacity-0 group-hover:opacity-40',
-          )}
-        />
-      </button>
-    </Th>
   )
 }
 

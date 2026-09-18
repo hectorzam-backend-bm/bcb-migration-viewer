@@ -1,21 +1,177 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { createColumnHelper, useTable } from '@tanstack/react-table'
 import { KeyText, Field, Sheet, Stamp, ActivityStamp } from '~/components/base'
 import { PageHeader, Breadcrumb, Breadcrumbs, BreadcrumbSeparator } from '~/components/shell'
 import { ErrorState, EmptyState, ManifestSkeleton } from '~/components/states'
 import { Card, Tab, Tabs, Grid, TextLink } from '~/components/card'
 import { RefreshButton } from '~/components/refresh'
-import {
-  TableHead,
-  TableBody,
-  RowLink,
-  TableRow,
-  Manifest,
-  Td,
-  Th,
-} from '~/components/table'
+import { RowLink } from '~/components/table'
+import { DataTable, features } from '~/components/data-table'
 import { NO_DATA, STATION_TYPE_LABELS, integer, dateTime, currency, percent } from '~/lib/format'
 import { stripDefaults, oneOf } from '~/lib/params'
+import type { ServiceStation, ServiceRoute, PassengerType } from '~/server/services'
 import { getService, type ServiceDetail } from '~/server/services'
+
+/* ── Tab columns ───────────────────────────────────────────────────────────
+   None of these three tables sort, filter or paginate; `enableSorting: false`
+   on each `useTable` call keeps the shared `features`' sort affordance off. */
+
+const stationHelper = createColumnHelper<typeof features, ServiceStation>()
+
+const stationColumns = stationHelper.columns([
+  stationHelper.accessor('number', {
+    header: 'Número',
+    meta: { numeric: true },
+    cell: ({ row, getValue }) => (
+      <RowLink to="/terminales/$id" params={{ id: row.original.id }}>
+        <KeyText emphasis>{getValue() || NO_DATA}</KeyText>
+      </RowLink>
+    ),
+  }),
+  stationHelper.accessor('shortName', {
+    header: 'Nombre corto',
+    meta: { className: 'text-ink-2' },
+    cell: ({ getValue }) => getValue() || NO_DATA,
+  }),
+  stationHelper.accessor('name', {
+    header: 'Nombre',
+    cell: ({ getValue }) => (
+      <span className="block max-w-[24rem] truncate" title={getValue()}>
+        {getValue() || NO_DATA}
+      </span>
+    ),
+  }),
+  stationHelper.accessor('type', {
+    header: 'Tipo',
+    meta: { className: 'text-ink-2' },
+    cell: ({ getValue }) => STATION_TYPE_LABELS[getValue()] ?? getValue() ?? NO_DATA,
+  }),
+  stationHelper.accessor('state', {
+    header: 'Estado',
+    meta: { className: 'text-ink-2' },
+    cell: ({ getValue }) => getValue() || NO_DATA,
+  }),
+  stationHelper.display({
+    id: 'status',
+    header: 'Estatus',
+    cell: ({ row }) => (
+      <ActivityStamp active={row.original.isActive} deleted={row.original.isDeleted} />
+    ),
+  }),
+])
+
+const routeHelper = createColumnHelper<typeof features, ServiceRoute>()
+
+const routeColumns = routeHelper.columns([
+  routeHelper.accessor('number', {
+    header: 'Número',
+    meta: { numeric: true },
+    cell: ({ row, getValue }) => (
+      <RowLink to="/rutas/$id" params={{ id: row.original.id }}>
+        <KeyText emphasis>{getValue() || NO_DATA}</KeyText>
+      </RowLink>
+    ),
+  }),
+  routeHelper.accessor('name', {
+    header: 'Nombre',
+    cell: ({ getValue }) => (
+      <span className="block max-w-[22rem] truncate" title={getValue()}>
+        {getValue() || NO_DATA}
+      </span>
+    ),
+  }),
+  routeHelper.display({
+    id: 'endpoints',
+    header: 'Origen → destino',
+    cell: ({ row }) => (
+      <span className="font-mono text-data text-ink-2">
+        {row.original.origin || NO_DATA}
+        <span className="px-1.5 text-ink-4">→</span>
+        {row.original.destination || NO_DATA}
+      </span>
+    ),
+  }),
+  routeHelper.accessor('segments', {
+    header: 'Tramos',
+    meta: { numeric: true },
+    cell: ({ getValue }) => {
+      const value = getValue()
+      return <span className={value === 0 ? 'text-ink-4' : undefined}>{integer(value)}</span>
+    },
+  }),
+  routeHelper.accessor('priceOneWay', {
+    header: 'Tarifa sencilla',
+    meta: { numeric: true },
+    cell: ({ getValue }) => currency(getValue()),
+  }),
+  routeHelper.display({
+    id: 'status',
+    header: 'Estatus',
+    cell: ({ row }) => (
+      <ActivityStamp active={row.original.isActive} deleted={row.original.isDeleted} />
+    ),
+  }),
+])
+
+const passengerHelper = createColumnHelper<typeof features, PassengerType>()
+
+const passengerColumns = passengerHelper.columns([
+  passengerHelper.accessor('key', {
+    header: 'Clave',
+    cell: ({ getValue }) => <KeyText emphasis>{getValue() || NO_DATA}</KeyText>,
+  }),
+  passengerHelper.accessor('name', {
+    header: 'Nombre',
+    cell: ({ row, getValue }) => (
+      <span
+        className="block max-w-[22rem] truncate"
+        title={row.original.description ?? getValue()}
+      >
+        {getValue() || NO_DATA}
+      </span>
+    ),
+  }),
+  passengerHelper.accessor('discountPercent', {
+    header: 'Descuento',
+    meta: { numeric: true },
+    cell: ({ getValue }) => {
+      const value = getValue()
+      return <span className={value === 0 ? 'text-ink-4' : undefined}>{percent(value)}</span>
+    },
+  }),
+  passengerHelper.accessor('seatingLimit', {
+    header: 'Límite de asientos',
+    meta: { numeric: true },
+    cell: ({ getValue }) => {
+      const value = getValue()
+      return value === null ? (
+        <span className="text-ink-4" title="Sin límite">
+          {NO_DATA}
+        </span>
+      ) : (
+        integer(value)
+      )
+    },
+  }),
+  passengerHelper.display({
+    id: 'document',
+    header: 'Documento requerido',
+    meta: { className: 'text-ink-2' },
+    cell: ({ row }) =>
+      row.original.requiredDocument
+        ? row.original.documentType
+          ? `Sí · ${row.original.documentType}`
+          : 'Sí'
+        : 'No',
+  }),
+  passengerHelper.display({
+    id: 'status',
+    header: 'Estatus',
+    cell: ({ row }) => (
+      <ActivityStamp active={row.original.isActive} deleted={row.original.isDeleted} />
+    ),
+  }),
+])
 
 const TABS = ['stations', 'routes', 'passengers'] as const
 type TabId = (typeof TABS)[number]
@@ -254,6 +410,14 @@ function CompanyDetail({ company }: { company: ServiceDetail['company'] }) {
 /* ── Tabs ──────────────────────────────────────────────────────────────── */
 
 function StationsTable({ stations }: { stations: ServiceDetail['stations'] }) {
+  const table = useTable({
+    features,
+    columns: stationColumns,
+    data: stations,
+    getRowId: (row) => row.id,
+    enableSorting: false,
+  })
+
   if (stations.length === 0) {
     return (
       <EmptyState
@@ -264,42 +428,23 @@ function StationsTable({ stations }: { stations: ServiceDetail['stations'] }) {
   }
 
   return (
-    <Manifest label="Terminales del servicio">
-      <TableHead>
-        <Th numeric>Número</Th>
-        <Th>Nombre corto</Th>
-        <Th>Nombre</Th>
-        <Th>Tipo</Th>
-        <Th>Estado</Th>
-        <Th>Estatus</Th>
-      </TableHead>
-      <TableBody>
-        {stations.map((t) => (
-          <TableRow key={t.id} dimmed={t.isDeleted}>
-            <Td numeric>
-              <RowLink to="/terminales/$id" params={{ id: t.id }}>
-                <KeyText emphasis>{t.number || NO_DATA}</KeyText>
-              </RowLink>
-            </Td>
-            <Td className="text-ink-2">{t.shortName || NO_DATA}</Td>
-            <Td>
-              <span className="block max-w-[24rem] truncate" title={t.name}>
-                {t.name || NO_DATA}
-              </span>
-            </Td>
-            <Td className="text-ink-2">{STATION_TYPE_LABELS[t.type] ?? t.type ?? NO_DATA}</Td>
-            <Td className="text-ink-2">{t.state || NO_DATA}</Td>
-            <Td>
-              <ActivityStamp active={t.isActive} deleted={t.isDeleted} />
-            </Td>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Manifest>
+    <DataTable
+      table={table}
+      label="Terminales del servicio"
+      rowProps={(row) => ({ dimmed: row.original.isDeleted })}
+    />
   )
 }
 
 function RoutesTable({ routes }: { routes: ServiceDetail['routes'] }) {
+  const table = useTable({
+    features,
+    columns: routeColumns,
+    data: routes,
+    getRowId: (row) => row.id,
+    enableSorting: false,
+  })
+
   if (routes.length === 0) {
     return (
       <EmptyState
@@ -310,52 +455,23 @@ function RoutesTable({ routes }: { routes: ServiceDetail['routes'] }) {
   }
 
   return (
-    <Manifest label="Rutas del servicio">
-      <TableHead>
-        <Th numeric>Número</Th>
-        <Th>Nombre</Th>
-        <Th>Origen → destino</Th>
-        <Th numeric>Tramos</Th>
-        <Th numeric>Tarifa sencilla</Th>
-        <Th>Estatus</Th>
-      </TableHead>
-      <TableBody>
-        {routes.map((r) => (
-          <TableRow key={r.id} dimmed={r.isDeleted}>
-            <Td numeric>
-              <RowLink to="/rutas/$id" params={{ id: r.id }}>
-                <KeyText emphasis>{r.number || NO_DATA}</KeyText>
-              </RowLink>
-            </Td>
-            <Td>
-              <span className="block max-w-[22rem] truncate" title={r.name}>
-                {r.name || NO_DATA}
-              </span>
-            </Td>
-            <Td>
-              <span className="font-mono text-data text-ink-2">
-                {r.origin || NO_DATA}
-                <span className="px-1.5 text-ink-4">→</span>
-                {r.destination || NO_DATA}
-              </span>
-            </Td>
-            <Td numeric>
-              <span className={r.segments === 0 ? 'text-ink-4' : undefined}>
-                {integer(r.segments)}
-              </span>
-            </Td>
-            <Td numeric>{currency(r.priceOneWay)}</Td>
-            <Td>
-              <ActivityStamp active={r.isActive} deleted={r.isDeleted} />
-            </Td>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Manifest>
+    <DataTable
+      table={table}
+      label="Rutas del servicio"
+      rowProps={(row) => ({ dimmed: row.original.isDeleted })}
+    />
   )
 }
 
 function PassengersTable({ types }: { types: ServiceDetail['passengerTypes'] }) {
+  const table = useTable({
+    features,
+    columns: passengerColumns,
+    data: types,
+    getRowId: (row) => row.id,
+    enableSorting: false,
+  })
+
   if (types.length === 0) {
     return (
       <EmptyState
@@ -366,53 +482,10 @@ function PassengersTable({ types }: { types: ServiceDetail['passengerTypes'] }) 
   }
 
   return (
-    <Manifest label="Tipos de pasajero del servicio">
-      <TableHead>
-        <Th>Clave</Th>
-        <Th>Nombre</Th>
-        <Th numeric>Descuento</Th>
-        <Th numeric>Límite de asientos</Th>
-        <Th>Documento requerido</Th>
-        <Th>Estatus</Th>
-      </TableHead>
-      <TableBody>
-        {types.map((p) => (
-          <TableRow key={p.id} dimmed={p.isDeleted}>
-            <Td>
-              <KeyText emphasis>{p.key || NO_DATA}</KeyText>
-            </Td>
-            <Td>
-              <span className="block max-w-[22rem] truncate" title={p.description ?? p.name}>
-                {p.name || NO_DATA}
-              </span>
-            </Td>
-            <Td numeric>
-              <span className={p.discountPercent === 0 ? 'text-ink-4' : undefined}>
-                {percent(p.discountPercent)}
-              </span>
-            </Td>
-            <Td numeric>
-              {p.seatingLimit === null ? (
-                <span className="text-ink-4" title="Sin límite">
-                  {NO_DATA}
-                </span>
-              ) : (
-                integer(p.seatingLimit)
-              )}
-            </Td>
-            <Td className="text-ink-2">
-              {p.requiredDocument
-                ? p.documentType
-                  ? `Sí · ${p.documentType}`
-                  : 'Sí'
-                : 'No'}
-            </Td>
-            <Td>
-              <ActivityStamp active={p.isActive} deleted={p.isDeleted} />
-            </Td>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Manifest>
+    <DataTable
+      table={table}
+      label="Tipos de pasajero del servicio"
+      rowProps={(row) => ({ dimmed: row.original.isDeleted })}
+    />
   )
 }

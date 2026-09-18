@@ -1,15 +1,17 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import type { LinkProps } from '@tanstack/react-router'
+import { createColumnHelper, useTable } from '@tanstack/react-table'
 import { ArrowUpRight } from 'lucide-react'
 import { Stat, KeyText, Sheet, Label, Stamp } from '~/components/base'
 import { PageHeader } from '~/components/shell'
 import { ErrorState, ManifestSkeleton } from '~/components/states'
 import { Block, TextLink } from '~/components/card'
-import { TableHead, TableBody, RowLink, TableRow, Manifest, Td, Th } from '~/components/table'
+import { RowLink } from '~/components/table'
+import { DataTable, features, skeletonWidths } from '~/components/data-table'
 import { RefreshButton } from '~/components/refresh'
 import { cn } from '~/lib/cn'
 import { integer, dateTime } from '~/lib/format'
-import { getSummary, type CatalogKey, type CheckKey } from '~/server/summary'
+import { getSummary, type CatalogKey, type CheckKey, type HcmCount } from '~/server/summary'
 
 /* ───────────────────────────────────────────────────────────────────────────
    The viewer's summary page. It is the only screen with a large focal point:
@@ -162,7 +164,125 @@ const HCM_ROWS = [
   { key: 'services', label: 'Servicios', to: '/servicios', filterable: false },
 ] as const
 
-const LOADING_COLUMNS = [38, 12, 10, 10]
+/* ── Table columns ─────────────────────────────────────────────────────────
+   Both tables below are built from hardcoded consts zipped with server
+   counts, not from a catalog; neither sorts, filters or paginates, so
+   `enableSorting: false` on each `useTable` call keeps the shared
+   `features`' sort affordance off. */
+
+type CheckRow = Check & { count: number }
+
+const checkHelper = createColumnHelper<typeof features, CheckRow>()
+
+const checkColumns = checkHelper.columns([
+  checkHelper.display({
+    id: 'title',
+    header: 'Revisión',
+    meta: { skeletonWidth: 38 },
+    cell: ({ row }) => {
+      const finding = row.original.count > 0
+      return (
+        <>
+          <span className={cn('block text-body', finding ? 'font-medium text-ink' : 'text-ink-2')}>
+            {row.original.title}
+          </span>
+          {/* The measure cap goes on the inner block, not on the cell: a cell
+              with max-width does not constrain the column. */}
+          <span className="mt-0.5 block max-w-[68ch] text-note text-ink-3">
+            {row.original.explanation}
+          </span>
+        </>
+      )
+    },
+  }),
+  checkHelper.display({
+    id: 'catalog',
+    header: 'Catálogo',
+    meta: { skeletonWidth: 12 },
+    cell: ({ row }) => (
+      <TextLink to={row.original.to} search={row.original.search} className="text-data text-ink-2">
+        {row.original.catalog}
+      </TextLink>
+    ),
+  }),
+  checkHelper.accessor('count', {
+    header: 'Encontrados',
+    meta: { numeric: true, skeletonWidth: 10 },
+    cell: ({ getValue }) => {
+      const finding = getValue() > 0
+      return <span className={finding ? 'font-medium text-ink' : 'text-ink-4'}>{integer(getValue())}</span>
+    },
+  }),
+  checkHelper.display({
+    id: 'status',
+    header: 'Estado',
+    meta: { skeletonWidth: 10 },
+    cell: ({ row }) => {
+      const finding = row.original.count > 0
+      return <Stamp tone={finding ? 'warning' : 'active'}>{finding ? 'Revisar' : 'Limpio'}</Stamp>
+    },
+  }),
+])
+
+/** Stable empty fallback: a fresh `[]` on every render would invalidate the
+ *  table's data reference for nothing. */
+const NO_CHECK_ROWS: Array<CheckRow> = []
+
+type HcmRow = (typeof HCM_ROWS)[number] & HcmCount
+
+const hcmHelper = createColumnHelper<typeof features, HcmRow>()
+
+const hcmColumns = hcmHelper.columns([
+  hcmHelper.display({
+    id: 'catalog',
+    header: 'Catálogo',
+    cell: ({ row }) => (
+      <TextLink to={row.original.to} className="text-body text-ink">
+        {row.original.label}
+      </TextLink>
+    ),
+  }),
+  hcmHelper.accessor('managed', {
+    header: 'Gestionados por HCM',
+    meta: { numeric: true },
+    cell: ({ row }) => (
+      <HcmStat
+        count={row.original.managed}
+        to={row.original.filterable ? row.original.to : undefined}
+        search={{ source: ['hcm'] }}
+        title={`${row.original.label} con hcmLastSeenRunId`}
+      />
+    ),
+  }),
+  hcmHelper.accessor('manual', {
+    header: 'Capturados a mano',
+    meta: { numeric: true },
+    cell: ({ row }) => (
+      <HcmStat
+        count={row.original.manual}
+        to={row.original.filterable ? row.original.to : undefined}
+        search={{ source: ['manual'] }}
+        title={`${row.original.label} sin hcmLastSeenRunId`}
+      />
+    ),
+  }),
+  hcmHelper.accessor('disabled', {
+    header: 'Marcados como desactivados',
+    meta: { numeric: true },
+    cell: ({ row }) => (
+      <span
+        title={`${row.original.label} con hcmDisabled`}
+        className={row.original.disabled > 0 ? 'text-amber' : 'text-ink-4'}
+      >
+        {integer(row.original.disabled)}
+      </span>
+    ),
+  }),
+])
+
+/** Stable empty fallback: a fresh `[]` on every render would invalidate the
+ *  table's data reference for nothing. */
+const NO_HCM_ROWS: Array<HcmRow> = []
 
 export const Route = createFileRoute('/')({
   loader: () => getSummary(),
@@ -171,7 +291,7 @@ export const Route = createFileRoute('/')({
     <>
       <PageHeader title="Resumen" subtitle="Contando registros…" />
       <div className="px-4 py-6">
-        <ManifestSkeleton columns={LOADING_COLUMNS} rows={9} />
+        <ManifestSkeleton columns={skeletonWidths(checkColumns)} rows={9} />
       </div>
     </>
   ),
@@ -192,6 +312,30 @@ function SummaryPage() {
   const data = Route.useLoaderData()
   const router = useRouter()
 
+  // Anomalies on top: first the ones with findings, largest to smallest.
+  const rows = data.ok
+    ? CHECKS.map((r) => ({ ...r, count: data.checks[r.key] })).sort((a, b) => b.count - a.count)
+    : NO_CHECK_ROWS
+  const hcmRows = data.ok
+    ? HCM_ROWS.map((f) => ({ ...f, ...data.hcm[f.key] }))
+    : NO_HCM_ROWS
+
+  // Hooks run unconditionally, before the `!data.ok` early return below.
+  const checkTable = useTable({
+    features,
+    columns: checkColumns,
+    data: rows,
+    getRowId: (row) => row.key,
+    enableSorting: false,
+  })
+  const hcmTable = useTable({
+    features,
+    columns: hcmColumns,
+    data: hcmRows,
+    getRowId: (row) => row.key,
+    enableSorting: false,
+  })
+
   // If the database did not answer, the whole summary page falls to the error:
   // painting cards at zero would say the migration is empty, a different lie.
   if (!data.ok) {
@@ -203,16 +347,12 @@ function SummaryPage() {
     )
   }
 
-  const { catalogs, checks, hcm, generatedAt } = data
+  const { catalogs, generatedAt } = data
 
   const totalCurrent = CATALOGS.reduce((total, c) => total + catalogs[c.key].current, 0)
   const totalInactive = CATALOGS.reduce((total, c) => total + catalogs[c.key].inactive, 0)
   const totalDeleted = CATALOGS.reduce((total, c) => total + catalogs[c.key].deleted, 0)
 
-  // Anomalies on top: first the ones with findings, largest to smallest.
-  const rows = CHECKS.map((r) => ({ ...r, count: checks[r.key] })).sort(
-    (a, b) => b.count - a.count,
-  )
   const withFindings = rows.filter((r) => r.count > 0).length
   const largest = rows[0]
 
@@ -328,105 +468,17 @@ function SummaryPage() {
         {/* ── Integrity checks ────────────────────────────────────────── */}
         <Block label="Revisiones de integridad">
           <Sheet className="overflow-hidden">
-            <Manifest label="Revisiones de integridad de la migración">
-              <TableHead>
-                <Th>Revisión</Th>
-                <Th>Catálogo</Th>
-                <Th numeric>Encontrados</Th>
-                <Th>Estado</Th>
-              </TableHead>
-              <TableBody>
-                {rows.map((r) => {
-                  const finding = r.count > 0
-                  return (
-                    <TableRow key={r.key}>
-                      <Td>
-                        <span
-                          className={cn(
-                            'block text-body',
-                            finding ? 'font-medium text-ink' : 'text-ink-2',
-                          )}
-                        >
-                          {r.title}
-                        </span>
-                        {/* The measure cap goes on the inner block, not on the cell:
-                            a cell with max-width does not constrain the column. */}
-                        <span className="mt-0.5 block max-w-[68ch] text-note text-ink-3">
-                          {r.explanation}
-                        </span>
-                      </Td>
-                      <Td>
-                        <TextLink to={r.to} search={r.search} className="text-data text-ink-2">
-                          {r.catalog}
-                        </TextLink>
-                      </Td>
-                      <Td numeric>
-                        <span className={finding ? 'font-medium text-ink' : 'text-ink-4'}>
-                          {integer(r.count)}
-                        </span>
-                      </Td>
-                      <Td>
-                        <Stamp tone={finding ? 'warning' : 'active'}>
-                          {finding ? 'Revisar' : 'Limpio'}
-                        </Stamp>
-                      </Td>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Manifest>
+            <DataTable table={checkTable} label="Revisiones de integridad de la migración" />
           </Sheet>
         </Block>
 
         {/* ── HCM sync ────────────────────────────────────────────────── */}
         <Block label="Sincronización HCM">
           <Sheet className="overflow-hidden">
-            <Manifest label="Origen de los registros según la sincronización HCM">
-              <TableHead>
-                <Th>Catálogo</Th>
-                <Th numeric>Gestionados por HCM</Th>
-                <Th numeric>Capturados a mano</Th>
-                <Th numeric>Marcados como desactivados</Th>
-              </TableHead>
-              <TableBody>
-                {HCM_ROWS.map((f) => {
-                  const count = hcm[f.key]
-                  return (
-                    <TableRow key={f.key}>
-                      <Td>
-                        <TextLink to={f.to} className="text-body text-ink">
-                          {f.label}
-                        </TextLink>
-                      </Td>
-                      <Td numeric>
-                        <HcmStat
-                          count={count.managed}
-                          to={f.filterable ? f.to : undefined}
-                          search={{ source: ['hcm'] }}
-                          title={`${f.label} con hcmLastSeenRunId`}
-                        />
-                      </Td>
-                      <Td numeric>
-                        <HcmStat
-                          count={count.manual}
-                          to={f.filterable ? f.to : undefined}
-                          search={{ source: ['manual'] }}
-                          title={`${f.label} sin hcmLastSeenRunId`}
-                        />
-                      </Td>
-                      <Td numeric>
-                        <span
-                          title={`${f.label} con hcmDisabled`}
-                          className={count.disabled > 0 ? 'text-amber' : 'text-ink-4'}
-                        >
-                          {integer(count.disabled)}
-                        </span>
-                      </Td>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Manifest>
+            <DataTable
+              table={hcmTable}
+              label="Origen de los registros según la sincronización HCM"
+            />
           </Sheet>
           <p className="mt-3 max-w-[78ch] text-note text-ink-3">
             Informativo: estas marcas no cambian el comportamiento del sistema. Un registro

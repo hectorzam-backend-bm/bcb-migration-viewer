@@ -1,4 +1,6 @@
+import { useMemo } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
+import { createColumnHelper, useTable } from '@tanstack/react-table'
 import {
   Stat,
   KeyText,
@@ -12,8 +14,8 @@ import {
 import { PageHeader, Breadcrumb, Breadcrumbs, BreadcrumbSeparator } from '~/components/shell'
 import { ErrorState, ManifestSkeleton } from '~/components/states'
 import { Card, Grid, TextLink } from '~/components/card'
-import { TableHead, TableBody, TableRow, Manifest, Td, Th } from '~/components/table'
 import { RefreshButton } from '~/components/refresh'
+import { DataTable, features } from '~/components/data-table'
 import { cn } from '~/lib/cn'
 import {
   NO_DATA,
@@ -27,6 +29,40 @@ import {
 } from '~/lib/format'
 import type { RouteDetail, StationRef, SegmentDetail } from '~/server/routes'
 import { getRoute } from '~/server/routes'
+
+type RoutePassengerType = RouteDetail['passengerTypes'][number]
+
+const passengerHelper = createColumnHelper<typeof features, RoutePassengerType>()
+
+/* No sorting, filtering or pagination on this table; `enableSorting: false`
+   on its `useTable` call keeps the shared `features`' sort affordance off. */
+const passengerColumns = passengerHelper.columns([
+  passengerHelper.accessor('name', {
+    header: 'Tipo',
+    meta: { className: 'text-ink' },
+  }),
+  passengerHelper.accessor('key', {
+    header: 'Clave',
+    cell: ({ getValue }) => <KeyText>{getValue()}</KeyText>,
+  }),
+  passengerHelper.accessor('discountPercent', {
+    header: 'Descuento',
+    meta: { numeric: true },
+    cell: ({ getValue }) => percent(getValue()),
+  }),
+  passengerHelper.accessor('seatingLimit', {
+    header: 'Límite de asientos',
+    meta: { numeric: true },
+    cell: ({ getValue }) => {
+      const value = getValue()
+      return (
+        <span className={value === null ? 'text-ink-3' : undefined}>
+          {value === null ? 'Sin límite' : integer(value)}
+        </span>
+      )
+    },
+  }),
+])
 
 export const Route = createFileRoute('/rutas/$id')({
   loader: ({ params }) => getRoute({ data: { id: params.id } }),
@@ -78,8 +114,21 @@ function EmptyNote({ children }: { children: string }) {
 
 /* ── Screen ─────────────────────────────────────────────────────────────── */
 
+/** Stable empty fallback: a fresh `[]` on every render would invalidate the
+ *  table's data reference for nothing. */
+const NO_PASSENGER_TYPES: Array<RoutePassengerType> = []
+
 function Screen() {
   const data = Route.useLoaderData()
+
+  // Hooks run unconditionally, before the `!data.ok` early return below.
+  const passengerTable = useTable({
+    features,
+    columns: passengerColumns,
+    data: data.ok ? data.route.passengerTypes : NO_PASSENGER_TYPES,
+    getRowId: (row) => row.id,
+    enableSorting: false,
+  })
 
   if (!data.ok) {
     return (
@@ -229,28 +278,11 @@ function Screen() {
               <EmptyNote>Sin tipos de pasajero configurados</EmptyNote>
             ) : (
               <div className="-m-5">
-                <Manifest label="Tipos de pasajero de la ruta">
-                  <TableHead>
-                    <Th>Tipo</Th>
-                    <Th>Clave</Th>
-                    <Th numeric>Descuento</Th>
-                    <Th numeric>Límite de asientos</Th>
-                  </TableHead>
-                  <TableBody>
-                    {routeDetail.passengerTypes.map((p) => (
-                      <TableRow key={p.id} dimmed={!p.isActive}>
-                        <Td className="text-ink">{p.name}</Td>
-                        <Td>
-                          <KeyText>{p.key}</KeyText>
-                        </Td>
-                        <Td numeric>{percent(p.discountPercent)}</Td>
-                        <Td numeric className={p.seatingLimit === null ? 'text-ink-3' : undefined}>
-                          {p.seatingLimit === null ? 'Sin límite' : integer(p.seatingLimit)}
-                        </Td>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Manifest>
+                <DataTable
+                  table={passengerTable}
+                  label="Tipos de pasajero de la ruta"
+                  rowProps={(row) => ({ dimmed: !row.original.isActive })}
+                />
               </div>
             )}
           </Card>
@@ -292,12 +324,145 @@ function Screen() {
 
 /* ── The segment ledger: this screen's signature ────────────────────────── */
 
+const segmentLedgerHelper = createColumnHelper<typeof features, SegmentDetail>()
+
+type SegmentTotals = {
+  count: number
+  stay: number
+  duration: number
+  distance: number
+  /** Segments with a `distanceKm` are not always all of them; the footer
+   *  marks the sum with a `*` and says how many contributed. */
+  withDistanceCount: number
+}
+
+/** The footer totals depend on the whole `segments` array, so the columns are
+ *  rebuilt (via `useMemo`, keyed on the route) rather than declared statically. */
+function makeSegmentLedgerColumns(totals: SegmentTotals) {
+  return segmentLedgerHelper.columns([
+    segmentLedgerHelper.accessor('number', {
+      header: 'No.',
+      footer: () => (
+        <span className="font-mono text-note font-medium tracking-[0.085em] text-ink-3 uppercase">
+          Total
+        </span>
+      ),
+      cell: ({ row, getValue }) => (
+        <span className="inline-flex items-center gap-1.5">
+          <KeyText emphasis>{getValue()}</KeyText>
+          {row.original.isMain ? <MainMark /> : null}
+        </span>
+      ),
+    }),
+    segmentLedgerHelper.display({
+      id: 'endpoints',
+      header: 'Origen → Destino',
+      footer: () => (
+        <span className="font-mono text-data text-ink-2">
+          {plural(totals.count, 'tramo', 'tramos')}
+        </span>
+      ),
+      cell: ({ row }) => (
+        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+          <TextLink to="/terminales/$id" params={{ id: row.original.origin.id }}>
+            <KeyText>{row.original.origin.key}</KeyText>
+          </TextLink>
+          <span aria-hidden className="text-ink-4">
+            →
+          </span>
+          <TextLink to="/terminales/$id" params={{ id: row.original.destination.id }}>
+            <KeyText>{row.original.destination.key}</KeyText>
+          </TextLink>
+          <span className="ml-1 truncate text-data text-ink-3">
+            {row.original.origin.name} — {row.original.destination.name}
+          </span>
+        </span>
+      ),
+    }),
+    segmentLedgerHelper.accessor('stayTimeMinutes', {
+      id: 'stayTime',
+      header: 'Estancia',
+      meta: { numeric: true, className: 'text-ink-2' },
+      footer: () => (
+        <span className="font-mono text-data font-medium text-ink">{minutes(totals.stay)}</span>
+      ),
+      cell: ({ getValue }) => minutes(getValue()),
+    }),
+    segmentLedgerHelper.accessor('durationMinutes', {
+      id: 'duration',
+      header: 'Duración',
+      meta: { numeric: true, className: 'text-ink-2' },
+      footer: () => (
+        <span className="font-mono text-data font-medium text-ink">
+          {minutes(totals.duration)}
+        </span>
+      ),
+      cell: ({ getValue }) => minutes(getValue()),
+    }),
+    segmentLedgerHelper.accessor('distanceKm', {
+      id: 'distance',
+      header: 'Distancia',
+      meta: { numeric: true, className: 'text-ink-2' },
+      footer: () => (
+        <span
+          className="font-mono text-data font-medium text-ink"
+          title={
+            totals.withDistanceCount === totals.count
+              ? undefined
+              : `Suma de ${integer(totals.withDistanceCount)} de ${integer(totals.count)} tramos con distancia registrada`
+          }
+        >
+          {kilometers(totals.distance)}
+          {totals.withDistanceCount === totals.count ? null : (
+            <span className="text-ink-4"> *</span>
+          )}
+        </span>
+      ),
+      cell: ({ getValue }) => kilometers(getValue()),
+    }),
+    segmentLedgerHelper.accessor('allowSale', {
+      id: 'sale',
+      header: 'Venta',
+      cell: ({ getValue }) => <YesNo value={getValue()} />,
+    }),
+    segmentLedgerHelper.accessor('priceOneWay', {
+      id: 'price',
+      header: 'Tarifa sencilla',
+      meta: { numeric: true },
+      cell: ({ getValue }) => currency(getValue()),
+    }),
+    segmentLedgerHelper.accessor('priceRound', {
+      id: 'priceRound',
+      header: 'Tarifa redonda',
+      meta: { numeric: true, className: 'text-ink-2' },
+      cell: ({ getValue }) => currency(getValue()),
+    }),
+  ])
+}
+
 function SegmentLedger({ routeDetail }: { routeDetail: RouteDetail }) {
   const segments = routeDetail.segments
-  const withDistance = segments.filter((t) => t.distanceKm !== null)
-  const totalDistance = withDistance.reduce((a, t) => a + (t.distanceKm ?? 0), 0)
-  const totalDuration = segments.reduce((a, t) => a + t.durationMinutes, 0)
-  const totalStay = segments.reduce((a, t) => a + t.stayTimeMinutes, 0)
+
+  const totals = useMemo<SegmentTotals>(() => {
+    const withDistance = segments.filter((t) => t.distanceKm !== null)
+    return {
+      count: segments.length,
+      stay: segments.reduce((a, t) => a + t.stayTimeMinutes, 0),
+      duration: segments.reduce((a, t) => a + t.durationMinutes, 0),
+      distance: withDistance.reduce((a, t) => a + (t.distanceKm ?? 0), 0),
+      withDistanceCount: withDistance.length,
+    }
+  }, [segments])
+
+  const columns = useMemo(() => makeSegmentLedgerColumns(totals), [totals])
+
+  const table = useTable({
+    features,
+    columns,
+    data: segments,
+    getRowId: (row) => row.id,
+    enableSorting: false,
+  })
 
   return (
     <Card
@@ -314,104 +479,17 @@ function SegmentLedger({ routeDetail }: { routeDetail: RouteDetail }) {
         </EmptyNote>
       ) : (
         <div className="-m-5">
-          <Manifest label={`Tramos de la ruta ${routeDetail.number}`}>
-            <TableHead>
-              <Th>No.</Th>
-              <Th>Origen → Destino</Th>
-              <Th numeric>Estancia</Th>
-              <Th numeric>Duración</Th>
-              <Th numeric>Distancia</Th>
-              <Th>Venta</Th>
-              <Th numeric>Tarifa sencilla</Th>
-              <Th numeric>Tarifa redonda</Th>
-            </TableHead>
-            <TableBody>
-              {segments.map((t) => (
-                <SegmentLine key={t.id} segment={t} />
-              ))}
-            </TableBody>
-            {/* The printed manifest's cut: double rule and totals. */}
-            <tfoot>
-              <tr className="[&>td]:border-t-[3px] [&>td]:border-double [&>td]:border-rule-strong [&>td]:px-3 [&>td]:py-2.5">
-                <td className="font-mono text-note font-medium tracking-[0.085em] text-ink-3 uppercase">
-                  Total
-                </td>
-                <td className="font-mono text-data text-ink-2">
-                  {plural(segments.length, 'tramo', 'tramos')}
-                </td>
-                <td className="text-right font-mono text-data font-medium text-ink">
-                  {minutes(totalStay)}
-                </td>
-                <td className="text-right font-mono text-data font-medium text-ink">
-                  {minutes(totalDuration)}
-                </td>
-                <td
-                  className="text-right font-mono text-data font-medium text-ink"
-                  title={
-                    withDistance.length === segments.length
-                      ? undefined
-                      : `Suma de ${integer(withDistance.length)} de ${integer(segments.length)} tramos con distancia registrada`
-                  }
-                >
-                  {kilometers(totalDistance)}
-                  {withDistance.length === segments.length ? null : (
-                    <span className="text-ink-4"> *</span>
-                  )}
-                </td>
-                <td />
-                <td />
-                <td />
-              </tr>
-            </tfoot>
-          </Manifest>
+          <DataTable
+            table={table}
+            label={`Tramos de la ruta ${routeDetail.number}`}
+            rowProps={(row) => ({
+              highlighted: row.original.isMain,
+              dimmed: !row.original.isActive,
+            })}
+          />
         </div>
       )}
     </Card>
-  )
-}
-
-function SegmentLine({ segment }: { segment: SegmentDetail }) {
-  return (
-    <TableRow highlighted={segment.isMain} dimmed={!segment.isActive}>
-      <Td>
-        <span className="inline-flex items-center gap-1.5">
-          <KeyText emphasis>{segment.number}</KeyText>
-          {segment.isMain ? <MainMark /> : null}
-        </span>
-      </Td>
-      <Td>
-        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-          <TextLink to="/terminales/$id" params={{ id: segment.origin.id }}>
-            <KeyText>{segment.origin.key}</KeyText>
-          </TextLink>
-          <span aria-hidden className="text-ink-4">
-            →
-          </span>
-          <TextLink to="/terminales/$id" params={{ id: segment.destination.id }}>
-            <KeyText>{segment.destination.key}</KeyText>
-          </TextLink>
-          <span className="ml-1 truncate text-data text-ink-3">
-            {segment.origin.name} — {segment.destination.name}
-          </span>
-        </span>
-      </Td>
-      <Td numeric className="text-ink-2">
-        {minutes(segment.stayTimeMinutes)}
-      </Td>
-      <Td numeric className="text-ink-2">
-        {minutes(segment.durationMinutes)}
-      </Td>
-      <Td numeric className="text-ink-2">
-        {kilometers(segment.distanceKm)}
-      </Td>
-      <Td>
-        <YesNo value={segment.allowSale} />
-      </Td>
-      <Td numeric>{currency(segment.priceOneWay)}</Td>
-      <Td numeric className="text-ink-2">
-        {currency(segment.priceRound)}
-      </Td>
-    </TableRow>
   )
 }
 

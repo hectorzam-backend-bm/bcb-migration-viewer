@@ -1,18 +1,13 @@
+import { useMemo } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
+import { createColumnHelper, useTable } from '@tanstack/react-table'
 import { KeyText, Field, Sheet, MainMark, Label, ActivityStamp } from '~/components/base'
 import { PageHeader, Breadcrumb, Breadcrumbs, BreadcrumbSeparator } from '~/components/shell'
 import { ErrorState, EmptyState, ManifestSkeleton } from '~/components/states'
 import { Card, Tab, Tabs, Grid, ExternalTextLink } from '~/components/card'
 import { RefreshButton } from '~/components/refresh'
-import {
-  TableHead,
-  TableBody,
-  RowLink,
-  TableRow,
-  Manifest,
-  Td,
-  Th,
-} from '~/components/table'
+import { RowLink } from '~/components/table'
+import { DataTable, features, type Columns } from '~/components/data-table'
 import {
   NO_DATA,
   STATION_TYPE_LABELS,
@@ -29,6 +24,9 @@ import {
   getStation,
   type StationFile,
   type StationRoute,
+  type StationService,
+  type StationSegment,
+  type StationBrief,
 } from '~/server/stations'
 
 const TABS = ['services', 'departures', 'arrivals', 'segments'] as const
@@ -130,78 +128,246 @@ function endpointClass(isCurrent: boolean) {
     : 'font-mono text-data text-ink-3'
 }
 
+/* ── Tab columns ───────────────────────────────────────────────────────────
+   None of these four tables sort, filter or paginate; `enableSorting: false`
+   on each `useTable` call keeps the shared `features`' sort affordance off. */
+
+const serviceHelper = createColumnHelper<typeof features, StationService>()
+
+const stationServiceColumns = serviceHelper.columns([
+  serviceHelper.accessor('number', {
+    header: 'No. servicio',
+    cell: ({ row, getValue }) => (
+      <RowLink to="/servicios/$id" params={{ id: row.original.id }}>
+        <KeyText emphasis>{getValue()}</KeyText>
+      </RowLink>
+    ),
+  }),
+  serviceHelper.accessor('key', {
+    header: 'Clave',
+    cell: ({ getValue }) => <KeyText>{getValue()}</KeyText>,
+  }),
+  serviceHelper.accessor('shortName', {
+    header: 'Nombre corto',
+    cell: ({ getValue }) => (
+      <span className="font-mono text-data whitespace-nowrap text-ink">{getValue()}</span>
+    ),
+  }),
+  serviceHelper.accessor('fullName', {
+    header: 'Nombre completo',
+    cell: ({ getValue }) => (
+      <span className="block max-w-[24rem] truncate text-ink-2" title={getValue()}>
+        {getValue()}
+      </span>
+    ),
+  }),
+  serviceHelper.display({
+    id: 'company',
+    header: 'Empresa',
+    cell: ({ row }) => (
+      <span className="whitespace-nowrap text-ink-2">
+        <span className="font-mono text-data text-ink-3">{row.original.company.key}</span>{' '}
+        {row.original.company.shortName}
+      </span>
+    ),
+  }),
+  serviceHelper.display({
+    id: 'status',
+    header: 'Estatus',
+    cell: ({ row }) => (
+      <ActivityStamp active={row.original.isActive} deleted={row.original.isDeleted} />
+    ),
+  }),
+])
+
+const routeHelper = createColumnHelper<typeof features, StationRoute>()
+
+/** `departures` and `arrivals` are the same table shape read from opposite
+ *  ends: the endpoint column shows whichever station isn't this one. */
+function makeRouteColumns(endpointColumn: string, endpoint: (r: StationRoute) => StationBrief) {
+  return routeHelper.columns([
+    routeHelper.accessor('number', {
+      header: 'No. ruta',
+      cell: ({ row, getValue }) => (
+        <RowLink to="/rutas/$id" params={{ id: row.original.id }}>
+          <KeyText emphasis>{getValue()}</KeyText>
+        </RowLink>
+      ),
+    }),
+    routeHelper.accessor('name', {
+      header: 'Nombre',
+      cell: ({ getValue }) => (
+        <span className="block max-w-[24rem] truncate text-ink-2" title={getValue()}>
+          {getValue()}
+        </span>
+      ),
+    }),
+    routeHelper.display({
+      id: 'endpoint',
+      header: endpointColumn,
+      cell: ({ row }) => {
+        const other = endpoint(row.original)
+        return (
+          <span className="font-mono text-data whitespace-nowrap text-ink-2">
+            {other.number} <span className="text-ink-4">·</span> {other.shortName}
+          </span>
+        )
+      },
+    }),
+    routeHelper.display({
+      id: 'service',
+      header: 'Servicio',
+      cell: ({ row }) => (
+        <span className="font-mono text-data whitespace-nowrap text-ink-2">
+          {row.original.service.number} <span className="text-ink-4">·</span>{' '}
+          {row.original.service.shortName}
+        </span>
+      ),
+    }),
+    routeHelper.accessor('travelTimeMinutes', {
+      header: 'Tiempo',
+      meta: { numeric: true },
+      cell: ({ getValue }) => minutes(getValue()),
+    }),
+    routeHelper.accessor('distanceKm', {
+      header: 'Distancia',
+      meta: { numeric: true },
+      cell: ({ getValue }) => kilometers(getValue()),
+    }),
+    routeHelper.accessor('priceOneWay', {
+      header: 'Tarifa sencilla',
+      meta: { numeric: true },
+      cell: ({ getValue }) => currency(getValue()),
+    }),
+    routeHelper.display({
+      id: 'status',
+      header: 'Estatus',
+      cell: ({ row }) => (
+        <ActivityStamp active={row.original.isActive} deleted={row.original.isDeleted} />
+      ),
+    }),
+  ])
+}
+
+const departureColumns = makeRouteColumns('Destino', (r) => r.destination)
+const arrivalColumns = makeRouteColumns('Origen', (r) => r.origin)
+
 function RouteTable({
   routes,
-  endpointColumn,
-  endpoint,
+  columns,
+  label,
   empty,
 }: {
   routes: Array<StationRoute>
-  endpointColumn: string
-  endpoint: (r: StationRoute) => { number: string; shortName: string }
+  columns: Columns<StationRoute>
+  label: string
   empty: string
 }) {
+  const table = useTable({
+    features,
+    columns,
+    data: routes,
+    getRowId: (row) => row.id,
+    enableSorting: false,
+  })
+
   if (routes.length === 0) {
     return <EmptyState title={empty} />
   }
   return (
-    <Manifest label={endpointColumn}>
-      <TableHead>
-        <Th>No. ruta</Th>
-        <Th>Nombre</Th>
-        <Th>{endpointColumn}</Th>
-        <Th>Servicio</Th>
-        <Th numeric>Tiempo</Th>
-        <Th numeric>Distancia</Th>
-        <Th numeric>Tarifa sencilla</Th>
-        <Th>Estatus</Th>
-      </TableHead>
-      <TableBody>
-        {routes.map((r) => {
-          const other = endpoint(r)
-          return (
-            <TableRow key={r.id} dimmed={r.isDeleted}>
-              <Td>
-                <RowLink to="/rutas/$id" params={{ id: r.id }}>
-                  <KeyText emphasis>{r.number}</KeyText>
-                </RowLink>
-              </Td>
-              <Td>
-                <span className="block max-w-[24rem] truncate text-ink-2" title={r.name}>
-                  {r.name}
-                </span>
-              </Td>
-              <Td>
-                <span className="font-mono text-data whitespace-nowrap text-ink-2">
-                  {other.number} <span className="text-ink-4">·</span> {other.shortName}
-                </span>
-              </Td>
-              <Td>
-                <span className="font-mono text-data whitespace-nowrap text-ink-2">
-                  {r.service.number} <span className="text-ink-4">·</span>{' '}
-                  {r.service.shortName}
-                </span>
-              </Td>
-              <Td numeric>{minutes(r.travelTimeMinutes)}</Td>
-              <Td numeric>{kilometers(r.distanceKm)}</Td>
-              <Td numeric>{currency(r.priceOneWay)}</Td>
-              <Td>
-                <ActivityStamp active={r.isActive} deleted={r.isDeleted} />
-              </Td>
-            </TableRow>
-          )
-        })}
-      </TableBody>
-    </Manifest>
+    <DataTable table={table} label={label} rowProps={(row) => ({ dimmed: row.original.isDeleted })} />
   )
 }
 
+const segmentHelper = createColumnHelper<typeof features, StationSegment>()
+
+/** The segment ledger needs to know which station this page is about, so the
+ *  origin/destination pair can put the current station in full ink. */
+function makeSegmentColumns(currentId: string) {
+  return segmentHelper.columns([
+    segmentHelper.accessor('number', {
+      header: 'No. tramo',
+      cell: ({ row, getValue }) => (
+        <span className="flex items-center gap-2">
+          <KeyText emphasis>{getValue()}</KeyText>
+          {row.original.isMain ? <MainMark /> : null}
+        </span>
+      ),
+    }),
+    segmentHelper.display({
+      id: 'route',
+      header: 'Ruta',
+      cell: ({ row }) => (
+        <RowLink to="/rutas/$id" params={{ id: row.original.route.id }}>
+          <span className="flex items-baseline gap-2 whitespace-nowrap">
+            <KeyText emphasis>{row.original.route.number}</KeyText>
+            <span className="max-w-[20rem] truncate text-ink-2">{row.original.route.name}</span>
+          </span>
+        </RowLink>
+      ),
+    }),
+    segmentHelper.display({
+      id: 'endpoints',
+      header: 'Trayecto',
+      cell: ({ row }) => (
+        <StationPair
+          origin={row.original.origin}
+          destination={row.original.destination}
+          currentId={currentId}
+        />
+      ),
+    }),
+    segmentHelper.accessor('priceOneWay', {
+      header: 'Tarifa sencilla',
+      meta: { numeric: true },
+      cell: ({ getValue }) => currency(getValue()),
+    }),
+    segmentHelper.display({
+      id: 'status',
+      header: 'Estatus',
+      cell: ({ row }) => (
+        <ActivityStamp active={row.original.isActive} deleted={row.original.isDeleted} />
+      ),
+    }),
+  ])
+}
+
 /* ── Screen ───────────────────────────────────────────────────────────────── */
+
+/** Stable empty fallbacks: a fresh `[]` on every render would invalidate the
+ *  table's data reference for nothing. */
+const NO_SERVICES: Array<StationService> = []
+const NO_SEGMENTS: Array<StationSegment> = []
 
 function Screen() {
   const data = Route.useLoaderData()
   const tab = Route.useSearch().tab ?? 'services'
   const navigate = Route.useNavigate()
+
+  const stationId = data.ok ? data.station.id : ''
+  const services = data.ok ? data.station.services : NO_SERVICES
+  const segments = data.ok ? data.segments : NO_SEGMENTS
+
+  // Hooks run unconditionally, before the `!data.ok` early return below. The
+  // segment columns depend on this station's id (to bold it in the
+  // origin/destination pair), so they're rebuilt only when that id changes.
+  const segmentColumns = useMemo(() => makeSegmentColumns(stationId), [stationId])
+
+  const servicesTable = useTable({
+    features,
+    columns: stationServiceColumns,
+    data: services,
+    getRowId: (row) => row.id,
+    enableSorting: false,
+  })
+
+  const segmentsTable = useTable({
+    features,
+    columns: segmentColumns,
+    data: segments,
+    getRowId: (row) => row.id,
+    enableSorting: false,
+  })
 
   if (!data.ok) {
     return (
@@ -219,7 +385,7 @@ function Screen() {
     )
   }
 
-  const { station: t, departures, arrivals, segments } = data
+  const { station: t, departures, arrivals } = data
 
   const hasCoordinates =
     Number.isFinite(t.latitude) &&
@@ -397,62 +563,19 @@ function Screen() {
                   detail="Esta terminal no está dada de alta en ningún servicio, por lo que tampoco se le puede deducir una empresa."
                 />
               ) : (
-                <Manifest label="Servicios de la terminal">
-                  <TableHead>
-                    <Th>No. servicio</Th>
-                    <Th>Clave</Th>
-                    <Th>Nombre corto</Th>
-                    <Th>Nombre completo</Th>
-                    <Th>Empresa</Th>
-                    <Th>Estatus</Th>
-                  </TableHead>
-                  <TableBody>
-                    {t.services.map((s) => (
-                      <TableRow key={s.id} dimmed={s.isDeleted}>
-                        <Td>
-                          <RowLink to="/servicios/$id" params={{ id: s.id }}>
-                            <KeyText emphasis>{s.number}</KeyText>
-                          </RowLink>
-                        </Td>
-                        <Td>
-                          <KeyText>{s.key}</KeyText>
-                        </Td>
-                        <Td>
-                          <span className="font-mono text-data whitespace-nowrap text-ink">
-                            {s.shortName}
-                          </span>
-                        </Td>
-                        <Td>
-                          <span
-                            className="block max-w-[24rem] truncate text-ink-2"
-                            title={s.fullName}
-                          >
-                            {s.fullName}
-                          </span>
-                        </Td>
-                        <Td>
-                          <span className="whitespace-nowrap text-ink-2">
-                            <span className="font-mono text-data text-ink-3">
-                              {s.company.key}
-                            </span>{' '}
-                            {s.company.shortName}
-                          </span>
-                        </Td>
-                        <Td>
-                          <ActivityStamp active={s.isActive} deleted={s.isDeleted} />
-                        </Td>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Manifest>
+                <DataTable
+                  table={servicesTable}
+                  label="Servicios de la terminal"
+                  rowProps={(row) => ({ dimmed: row.original.isDeleted })}
+                />
               )}
             </Tab>
 
             <Tab value="departures">
               <RouteTable
                 routes={departures}
-                endpointColumn="Destino"
-                endpoint={(r) => r.destination}
+                columns={departureColumns}
+                label="Destino"
                 empty="Ninguna ruta sale de esta terminal"
               />
             </Tab>
@@ -460,8 +583,8 @@ function Screen() {
             <Tab value="arrivals">
               <RouteTable
                 routes={arrivals}
-                endpointColumn="Origen"
-                endpoint={(r) => r.origin}
+                columns={arrivalColumns}
+                label="Origen"
                 empty="Ninguna ruta llega a esta terminal"
               />
             </Tab>
@@ -473,44 +596,11 @@ function Screen() {
                   detail="Ningún tramo la usa como origen ni como destino."
                 />
               ) : (
-                <Manifest label="Tramos que tocan la terminal">
-                  <TableHead>
-                    <Th>No. tramo</Th>
-                    <Th>Ruta</Th>
-                    <Th>Trayecto</Th>
-                    <Th numeric>Tarifa sencilla</Th>
-                    <Th>Estatus</Th>
-                  </TableHead>
-                  <TableBody>
-                    {segments.map((s) => (
-                      <TableRow key={s.id} dimmed={s.isDeleted}>
-                        <Td>
-                          <span className="flex items-center gap-2">
-                            <KeyText emphasis>{s.number}</KeyText>
-                            {s.isMain ? <MainMark /> : null}
-                          </span>
-                        </Td>
-                        <Td>
-                          <RowLink to="/rutas/$id" params={{ id: s.route.id }}>
-                            <span className="flex items-baseline gap-2 whitespace-nowrap">
-                              <KeyText emphasis>{s.route.number}</KeyText>
-                              <span className="max-w-[20rem] truncate text-ink-2">
-                                {s.route.name}
-                              </span>
-                            </span>
-                          </RowLink>
-                        </Td>
-                        <Td>
-                          <StationPair origin={s.origin} destination={s.destination} currentId={t.id} />
-                        </Td>
-                        <Td numeric>{currency(s.priceOneWay)}</Td>
-                        <Td>
-                          <ActivityStamp active={s.isActive} deleted={s.isDeleted} />
-                        </Td>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Manifest>
+                <DataTable
+                  table={segmentsTable}
+                  label="Tramos que tocan la terminal"
+                  rowProps={(row) => ({ dimmed: row.original.isDeleted })}
+                />
               )}
             </Tab>
           </Tabs>
