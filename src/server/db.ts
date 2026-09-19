@@ -38,12 +38,19 @@ function requirePrismaModules() {
 }
 
 /**
- * This viewer is READ-ONLY.
+ * This viewer is READ-ONLY, with one deliberate exception: `dbWrite` below.
  *
- * Two locks, redundant on purpose:
+ * Two locks on `db`, redundant on purpose:
  *  1. DATABASE_URL should point at a user with SELECT-only permissions.
  *  2. The extension below rejects any write operation before it leaves this
  *     process, even if the database user happened to have extra permissions.
+ *
+ * `dbWrite` is the raw client, with neither lock. It exists because `/importar`'s
+ * JSON restore step (`src/server/restore.ts`, the only module that imports it)
+ * writes `Company`/`Service`/`Unit`/`UnitDeck` directly: those four tables have
+ * no unauthenticated API to proxy to (unlike the CSV steps in `seeds.ts`), and
+ * `/seeds/clean` deletes all four with nothing in the backend able to restore
+ * them. `db` and `dbWrite` share one connection pool — `getRaw()` is built once.
  */
 const READ_OPERATIONS = new Set([
   'findUnique',
@@ -75,7 +82,7 @@ export class ConnectionError extends Error {
   }
 }
 
-function buildClient() {
+function buildRawClient() {
   const connectionString = process.env.DATABASE_URL
 
   if (!connectionString) {
@@ -88,7 +95,11 @@ function buildClient() {
   const { PrismaPg, PrismaClient } = requirePrismaModules()
   const adapter = new PrismaPg({ connectionString })
 
-  return new PrismaClient({ adapter }).$extends({
+  return new PrismaClient({ adapter })
+}
+
+function lockClient(raw: RawClient) {
+  return raw.$extends({
     query: {
       $allModels: {
         async $allOperations({ model, operation, args, query }) {
@@ -102,26 +113,42 @@ function buildClient() {
   })
 }
 
-type Client = ReturnType<typeof buildClient>
+type RawClient = ReturnType<typeof buildRawClient>
+type LockedClient = ReturnType<typeof lockClient>
 export type PrismaClientType = GeneratedPrismaClient
 
-const global_ = globalThis as unknown as { __prismaViewer?: Client }
+const global_ = globalThis as unknown as { __prismaRaw?: RawClient; __prismaLocked?: LockedClient }
 
-function getClient(): Client {
-  if (!global_.__prismaViewer) {
-    global_.__prismaViewer = buildClient()
+function getRaw(): RawClient {
+  if (!global_.__prismaRaw) {
+    global_.__prismaRaw = buildRawClient()
   }
-  return global_.__prismaViewer
+  return global_.__prismaRaw
+}
+
+function getLocked(): LockedClient {
+  if (!global_.__prismaLocked) {
+    global_.__prismaLocked = lockClient(getRaw())
+  }
+  return global_.__prismaLocked
 }
 
 /**
  * Built on first use, not on import: if DATABASE_URL is missing the viewer must
  * be able to paint a screen that explains it, not crash at startup.
  */
-export const db = new Proxy({} as Client, {
+export const db = new Proxy({} as LockedClient, {
   get(_target, property) {
-    const value = Reflect.get(getClient() as object, property)
-    return typeof value === 'function' ? value.bind(getClient()) : value
+    const value = Reflect.get(getLocked() as object, property)
+    return typeof value === 'function' ? value.bind(getLocked()) : value
+  },
+})
+
+/** See the file header. Only `src/server/restore.ts` may import this. */
+export const dbWrite = new Proxy({} as RawClient, {
+  get(_target, property) {
+    const value = Reflect.get(getRaw() as object, property)
+    return typeof value === 'function' ? value.bind(getRaw()) : value
   },
 })
 

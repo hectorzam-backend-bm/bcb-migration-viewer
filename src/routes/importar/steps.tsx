@@ -14,14 +14,20 @@ export type Slot = { key: SlotKey; label: string; legacyFile: string }
 
 export type StepStatus = { done: boolean; note: string }
 
+/** Which bundled JSON restore a `kind: 'restore'` step runs — see
+ *  `~/server/restore`'s `restoreCatalog`/`restoreUnits`. */
+export type RestoreTarget = 'catalog' | 'units'
+
 export type StepDef = {
-  kind: 'clean' | 'status' | 'upload'
+  kind: 'clean' | 'restore' | 'upload'
   title: string
   description: string
   /** Only for kind: 'upload' — the key `runImport` expects in its `step` field. */
   importStep?: ImportStep
   /** Only for kind: 'upload' — one dropzone per entry. */
   slots?: ReadonlyArray<Slot>
+  /** Only for kind: 'restore'. */
+  restoreTarget?: RestoreTarget
   status: (s: ImportStatus) => StepStatus
 }
 
@@ -34,10 +40,11 @@ export const STEPS: ReadonlyArray<StepDef> = [
     status: () => ({ done: false, note: 'Paso opcional — sólo si vas a reimportar desde cero.' }),
   },
   {
-    kind: 'status',
+    kind: 'restore',
     title: 'Empresas y servicios',
     description:
-      'Llegan por el sync de HCM, fuera de este visor. Aquí sólo se comprueba que ya estén cargados.',
+      'Llegan por el sync de HCM, fuera de este visor — pero esa vía no crea nada aquí, así que si la base se limpió, este paso las restaura desde el respaldo incluido en el visor.',
+    restoreTarget: 'catalog',
     status: (s) =>
       s.companies > 0 && s.services > 0
         ? { done: true, note: `${plural(s.companies, 'empresa', 'empresas')} · ${plural(s.services, 'servicio', 'servicios')}` }
@@ -95,6 +102,17 @@ export const STEPS: ReadonlyArray<StepDef> = [
       s.routesWithTariff > 0
         ? { done: true, note: `${plural(s.routesWithTariff, 'ruta', 'rutas')} con tarifa` }
         : { done: false, note: 'Ninguna ruta tiene tarifa todavía.' },
+  },
+  {
+    kind: 'restore',
+    title: 'Unidades',
+    description:
+      'No hay ninguna vía en el API para recrear unidades — este paso las restaura desde el respaldo incluido, con un nivel (deck) por unidad. Asignar una a las rutas es opcional y queda aparte, abajo.',
+    restoreTarget: 'units',
+    status: (s) =>
+      s.units > 0 && s.unitDecks > 0
+        ? { done: true, note: `${plural(s.units, 'unidad', 'unidades')} · ${plural(s.unitDecks, 'nivel', 'niveles')}` }
+        : { done: false, note: 'Sin unidades todavía.' },
   },
   {
     kind: 'upload',

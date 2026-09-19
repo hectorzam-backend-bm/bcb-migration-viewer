@@ -124,8 +124,10 @@ lo nuevo, con los nombres reales actuales.
 
 `/importar` es la única excepción a la primera línea de este documento ("nada que sugiera que se
 puede tocar"): un asistente por pasos que sube CSV y los reenvía al backend de origen. La excepción
-está acotada a esa ruta — ningún otro catálogo gana un botón de escritura, y el visor sigue sin
-escribir en su propia base: quien escribe es el backend, por HTTP (`src/server/seeds.ts`).
+está acotada a esa ruta — ningún otro catálogo gana un botón de escritura. Dentro de `/importar` hay
+dos vías: los 5 pasos de CSV escriben por HTTP, vía el backend (`src/server/seeds.ts`); los pasos de
+Empresas/servicios y Unidades restauran desde un respaldo JSON incluido en el visor y sí escriben
+aquí, directo con Prisma (`src/server/restore.ts`) — la única pantalla donde eso es cierto.
 
 - **Firma nueva — la tira de pasos** (`src/routes/importar/stepper.tsx`, no compartida, mismo
   criterio que `DayStrip`): chips con estado hecho / actual / bloqueado / pendiente. El estado
@@ -143,6 +145,13 @@ escribir en su propia base: quien escribe es el backend, por HTTP (`src/server/s
   migrada, no una falla del asistente.
 - Ningún `Button` compartido nuevo: los botones de `/importar` reusan el recetario que ya vivía
   pegado en `refresh.tsx` y `states.tsx`, copiado tal cual.
+- **Firma nueva — el `<select>` de unidades** (paso Unidades, dentro de `index.tsx`): el primer
+  elemento nativo de formulario del visor que no es texto ni archivo. Mismas superficies que el
+  input de confirmación de Limpiar base (`bg-hundido`, `border-regla`, foco en `sello/60`) para que
+  no se lea como un componente distinto, sólo como otro tipo de campo.
+- **Atajo de migración, dicho en voz alta**: la asignación masiva de unidad a rutas (misma
+  pantalla) es una decisión que el asistente toma por conveniencia, no una regla de negocio. El
+  texto junto al botón lo dice explícitamente — no se disfraza de flujo normal.
 
 ## Reglas de datos
 

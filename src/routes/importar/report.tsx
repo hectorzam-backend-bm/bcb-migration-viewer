@@ -27,6 +27,10 @@ export const REASON_LABELS: Record<string, string> = {
   INVALID_DEPARTURE: 'Fecha y hora de salida inválida',
   PASSENGER_TYPE_NOT_FOUND: 'No se encontró el tipo de pasajero',
   TRIP_NOT_FOUND_FOR_LIMIT: 'El límite no corresponde a ninguna corrida',
+  // Del restore de JSON (`~/server/restore`), no del API.
+  ALREADY_EXISTS_WITH_OTHER_ID: 'Ya existe una fila con esa clave, bajo otro id',
+  COMPANY_NOT_FOUND: 'No se encontró la empresa',
+  UNIT_NOT_FOUND: 'No se encontró la unidad',
 }
 
 export const COUNTER_LABELS: Record<string, string> = {
@@ -42,6 +46,13 @@ export const COUNTER_LABELS: Record<string, string> = {
   operatorsUnresolved: 'Operadores sin resolver',
   busesUnresolved: 'Autobuses sin resolver',
   negativeTicketsSoldClamped: 'Boletos vendidos negativos ajustados a 0',
+  // Del restore de JSON (`~/server/restore`), no del API.
+  companiesUpdated: 'Empresas actualizadas',
+  servicesUpdated: 'Servicios actualizados',
+  unitsUpdated: 'Unidades actualizadas',
+  decksUpdated: 'Niveles actualizados',
+  placeholderFilesCreated: 'Archivos de relleno creados',
+  routesAssigned: 'Rutas asignadas',
 }
 
 /** Counters worth flagging amber: gaps in the data, not routine outcomes of

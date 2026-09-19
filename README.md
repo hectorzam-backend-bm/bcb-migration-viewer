@@ -9,21 +9,28 @@ cp .env.example .env     # DATABASE_URL a tu Postgres local, SEEDS_API_URL al ba
 pnpm dev                 # http://localhost:4000
 ```
 
-## Sólo lectura, con dos candados
+## Sólo lectura, con dos candados — y dos excepciones en `/importar`
 
-Este visor nunca escribe **en la base**. La garantía no depende de que la interfaz no tenga botones:
+Este visor nunca escribe **en la base**, salvo en `/importar`. La garantía no depende de que la
+interfaz no tenga botones:
 
-1. **En la aplicación** — el cliente Prisma de `src/server/db.ts` lleva una extensión que rechaza
-   toda operación que no sea de lectura (`findMany`, `findFirst`, `count`, `aggregate`, `groupBy`…).
-   Un `create`, `update`, `delete` o `upsert` lanza `ErrorDeEscrituraBloqueada` antes de salir del
-   proceso.
+1. **En la aplicación** — el cliente Prisma de `src/server/db.ts` (`db`) lleva una extensión que
+   rechaza toda operación que no sea de lectura (`findMany`, `findFirst`, `count`, `aggregate`,
+   `groupBy`…). Un `create`, `update`, `delete` o `upsert` lanza `ErrorDeEscrituraBloqueada` antes
+   de salir del proceso.
 2. **En la base** — se recomienda apuntar `DATABASE_URL` a un usuario con permisos únicamente de
    `SELECT`. El candado de la aplicación sigue valiendo aunque el usuario tuviera permisos de más.
 
-La única excepción está en `/importar`: sube los CSV del catálogo legado y los reenvía por HTTP a
-los endpoints `/seeds/*` del backend (`src/server/seeds.ts`, con la URL en `SEEDS_API_URL`) — sin
-autenticación, pensados para correr en local. Quien escribe es el backend; el Prisma de este visor
-sigue detrás de los dos candados de arriba.
+`/importar` tiene dos rutas de escritura, con dueños distintos:
+
+- **Los 5 pasos de CSV** (terminales, rutas, tramos, tarifas, corridas) reenvían el archivo por
+  HTTP a los endpoints `/seeds/*` del backend (`src/server/seeds.ts`, con la URL en
+  `SEEDS_API_URL`) — sin autenticación, pensados para correr en local. Quien escribe es el backend;
+  el Prisma de este visor sigue detrás de los dos candados de arriba.
+- **El respaldo de empresas, servicios y unidades** (`src/server/restore.ts`) sí escribe aquí,
+  directo con Prisma, usando `dbWrite` — el único import de ese cliente sin candado en todo el
+  repo. Existe porque `POST /seeds/clean` borra esas tablas y ningún endpoint del backend puede
+  recrearlas sin un JWT que este visor no tiene; los datos vienen de los JSON en `src/assets/`.
 
 No hay migraciones en este repo. `prisma generate` es lo único que se ejecuta; `db push` y
 `migrate` no forman parte de ningún script.
@@ -92,10 +99,12 @@ prisma/schema.prisma        esquema (copia del backend, una línea cambiada)
 prisma.config.ts            configuración del CLI de Prisma 7
 generated/prisma/           cliente generado — ignorado por git
 src/
+  assets/                   respaldo JSON de empresas, servicios y unidades — ver restore.ts
   styles/app.css            tokens del sistema de diseño
   server/
-    db.ts                   cliente Prisma de sólo lectura + traducción de fallas
-    seeds.ts                reenvía CSV a /seeds/* del backend — la única escritura del visor
+    db.ts                   cliente Prisma de sólo lectura (db) + el crudo sin candado (dbWrite)
+    seeds.ts                reenvía CSV a /seeds/* del backend
+    restore.ts              restaura desde src/assets/ con dbWrite — la única escritura directa
     <sección>.ts            funciones de servidor por catálogo
   routes/                   rutas por archivo de TanStack Router
     importar/               asistente de carga: pasos, zona de soltado, reporte

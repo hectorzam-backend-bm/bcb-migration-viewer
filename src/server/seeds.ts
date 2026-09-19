@@ -2,11 +2,13 @@ import { createServerFn } from '@tanstack/react-start'
 import { db, describeFailure } from './db'
 
 /**
- * `/importar` — the one place in this viewer that writes anything, and even
- * here it never touches the database directly: it proxies CSV uploads to the
- * `/seeds/*` endpoints of the BCB_EstrellaRoja_Backend API (unauthenticated,
- * local-only by design) and reads back its `ImportReport`. The read-only lock
- * in `./db.ts` is untouched — every query below is a `count()`.
+ * `/importar`'s CSV steps: every write here is a proxy to the `/seeds/*`
+ * endpoints of the BCB_EstrellaRoja_Backend API (unauthenticated, local-only
+ * by design), never a direct database write — the read-only lock in `./db.ts`
+ * is untouched, every query below is a `count()` or a `findMany` select. The
+ * wizard's JSON restore step (companies, services, units — `restore.ts`) is
+ * the one exception to that, for tables `/seeds/clean` deletes with no API
+ * able to bring them back; see that file's header.
  *
  * Order is enforced by the backend, not here: `clean -> stations -> routes ->
  * segments -> tariffs -> trips`. Each `import/*` call expects specific
@@ -132,6 +134,10 @@ export type ImportStatus = {
   /** The gate for the trips step. */
   routesWithoutUnit: number
   units: number
+  unitDecks: number
+  /** For the units step's assign picker — active units only, capacity summed
+   *  across decks (a double-decker unit has more than one). */
+  unitOptions: Array<{ id: string; name: string; capacity: number }>
   routesWithTariff: number
   segmentsWithTariff: number
   trips: number
@@ -154,6 +160,8 @@ export const getImportStatus = createServerFn({ method: 'GET' }).handler(
         segments,
         routesWithoutUnit,
         units,
+        unitDecks,
+        unitRows,
         routesWithTariff,
         segmentsWithTariff,
         trips,
@@ -169,6 +177,12 @@ export const getImportStatus = createServerFn({ method: 'GET' }).handler(
         db.segment.count({ where: { deletedAt: null } }),
         db.route.count({ where: { deletedAt: null, unitId: null } }),
         db.unit.count({ where: { deletedAt: null } }),
+        db.unitDeck.count(),
+        db.unit.findMany({
+          where: { deletedAt: null },
+          select: { id: true, name: true, decks: { select: { capacity: true } } },
+          orderBy: { name: 'asc' },
+        }),
         db.route.count({ where: { deletedAt: null, priceOneWay: { gt: 0 } } }),
         db.segment.count({ where: { deletedAt: null, priceOneWay: { gt: 0 } } }),
         db.trip.count({ where: { deletedAt: null } }),
@@ -176,6 +190,11 @@ export const getImportStatus = createServerFn({ method: 'GET' }).handler(
         db.operator.count(),
         db.bus.count({ where: { deletedAt: null } }),
       ])
+      const unitOptions = unitRows.map((u) => ({
+        id: u.id,
+        name: u.name,
+        capacity: u.decks.reduce((sum, d) => sum + d.capacity, 0),
+      }))
       return {
         ok: true,
         status: {
@@ -187,6 +206,8 @@ export const getImportStatus = createServerFn({ method: 'GET' }).handler(
           segments,
           routesWithoutUnit,
           units,
+          unitDecks,
+          unitOptions,
           routesWithTariff,
           segmentsWithTariff,
           trips,

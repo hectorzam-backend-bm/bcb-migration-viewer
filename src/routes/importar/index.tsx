@@ -6,10 +6,11 @@ import { PageHeader } from '~/components/shell'
 import { ErrorState, SkeletonBar } from '~/components/states'
 import { RefreshButton } from '~/components/refresh'
 import { cn } from '~/lib/cn'
-import { NO_DATA, integer } from '~/lib/format'
+import { NO_DATA, integer, plural } from '~/lib/format'
 import { integerParam, stripDefaults } from '~/lib/params'
 import { cleanDatabase, getImportStatus, runImport } from '~/server/seeds'
 import type { ImportReport, ImportStatus } from '~/server/seeds'
+import { assignUnitToRoutes, restoreCatalog, restoreUnits } from '~/server/restore'
 import { STEPS } from './steps'
 import type { SlotKey, StepDef } from './steps'
 import { Stepper } from './stepper'
@@ -34,6 +35,11 @@ type RunState =
   | { status: 'running' }
   | { status: 'done'; report?: ImportReport; message?: string }
   | { status: 'failed'; failure: SeedsFailure }
+
+/** Every run keyed by step index, plus the one fixed key for the units step's
+ *  optional assign action — the only run in the wizard that isn't itself a
+ *  step. */
+type RunKey = number | 'assign'
 
 const DEFAULT_SEARCH = { paso: 0 }
 
@@ -178,15 +184,49 @@ function CleanPanel({ def, run, onClean }: { def: StepDef; run: RunState | undef
   )
 }
 
-function VerifyPanel({ def, status }: { def: StepDef; status: ImportStatus }) {
+/**
+ * Serves both `restoreTarget`s: "Empresas y servicios" (`catalog`) and
+ * "Unidades" (`units`). The assign control is `units`-only and optional —
+ * restoring units does not assign them to anything by itself.
+ */
+function RestorePanel({
+  def,
+  status,
+  run,
+  onRestore,
+  assign,
+}: {
+  def: StepDef
+  status: ImportStatus
+  run: RunState | undefined
+  onRestore: () => void
+  assign?: {
+    unitId: string
+    onUnitChange: (unitId: string) => void
+    run: RunState | undefined
+    onAssign: () => void
+  }
+}) {
   const { done, note } = def.status(status)
+  const isRunning = run?.status === 'running'
+  const isAssigning = assign?.run?.status === 'running'
+
   return (
-    <div>
+    <div aria-busy={isRunning}>
       <p className="max-w-[70ch] text-body text-ink-2">{def.description}</p>
 
       <div className="mt-5 grid gap-5 sm:grid-cols-2">
-        <Stat value={integer(status.companies)} label="Empresas" />
-        <Stat value={integer(status.services)} label="Servicios" />
+        {def.restoreTarget === 'units' ? (
+          <>
+            <Stat value={integer(status.units)} label="Unidades" />
+            <Stat value={integer(status.unitDecks)} label="Niveles" />
+          </>
+        ) : (
+          <>
+            <Stat value={integer(status.companies)} label="Empresas" />
+            <Stat value={integer(status.services)} label="Servicios" />
+          </>
+        )}
       </div>
 
       <Rule className="my-5" />
@@ -195,6 +235,77 @@ function VerifyPanel({ def, status }: { def: StepDef; status: ImportStatus }) {
         <Stamp tone={done ? 'active' : 'warning'}>{done ? 'Listo' : 'Faltan'}</Stamp>
         <span className="text-body text-ink-2">{note}</span>
       </div>
+
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <button type="button" onClick={onRestore} disabled={isRunning} className={ACTION_BUTTON_CLASS}>
+          {isRunning ? (
+            <span className="inline-flex items-center gap-2">
+              <RotateCw size={13} strokeWidth={1.75} aria-hidden className="animate-[rotate_700ms_linear_infinite]" />
+              Restaurando…
+            </span>
+          ) : (
+            'Restaurar desde el respaldo'
+          )}
+        </button>
+        <span className="text-note text-ink-3">
+          {def.restoreTarget === 'units' ? 'Unit.json y UnitDeck.json' : 'Company.json y Service.json'}, incluidos en
+          el visor.
+        </span>
+      </div>
+
+      {run?.status === 'done' && run.report ? <ReportPanel title={def.title} report={run.report} /> : null}
+      {run?.status === 'failed' ? <RunFailure failure={run.failure} onRetry={onRestore} /> : null}
+
+      {assign ? (
+        <div className="mt-6 border-t border-rule pt-5">
+          <Label>Asignar una unidad a las rutas sin unidad</Label>
+          <p className="mt-2 max-w-[68ch] text-body text-ink-2">
+            Atajo de migración, no una decisión de negocio: asigna la misma unidad a las{' '}
+            {integer(status.routesWithoutUnit)} rutas que todavía no tienen una, para poder avanzar al paso de
+            Corridas. Puedes reasignarlas después, ruta por ruta, en el panel de administración.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <select
+              value={assign.unitId}
+              onChange={(e) => assign.onUnitChange(e.target.value)}
+              disabled={isAssigning || status.unitOptions.length === 0}
+              className={cn(
+                'h-9 rounded-chip border border-rule bg-sunken px-2.5',
+                'font-mono text-body text-ink',
+                'transition-colors duration-100 hover:border-rule-strong focus:border-stamp/60 focus:outline-none',
+                'disabled:pointer-events-none disabled:text-ink-4',
+              )}
+            >
+              <option value="">Elige una unidad…</option>
+              {status.unitOptions.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name} · {plural(u.capacity, 'asiento', 'asientos')}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={assign.onAssign}
+              disabled={!assign.unitId || isAssigning || status.routesWithoutUnit === 0}
+              className={ACTION_BUTTON_CLASS}
+            >
+              {isAssigning ? (
+                <span className="inline-flex items-center gap-2">
+                  <RotateCw size={13} strokeWidth={1.75} aria-hidden className="animate-[rotate_700ms_linear_infinite]" />
+                  Asignando…
+                </span>
+              ) : (
+                `Asignar a las ${integer(status.routesWithoutUnit)} rutas sin unidad`
+              )}
+            </button>
+          </div>
+
+          {assign.run?.status === 'done' && assign.run.report ? (
+            <ReportPanel title="Asignación de unidad" report={assign.run.report} />
+          ) : null}
+          {assign.run?.status === 'failed' ? <RunFailure failure={assign.run.failure} onRetry={assign.onAssign} /> : null}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -227,7 +338,7 @@ function TripsGate({ status }: { status: ImportStatus }) {
         {noRoutes
           ? 'Todavía no hay rutas importadas — sube primero el paso de Rutas.'
           : blocked
-            ? 'Cada ruta necesita una unidad asignada antes de poder crear sus corridas: la unidad define el acomodo de asientos de cada viaje. Asígnalas en el panel de administración y vuelve a leer.'
+            ? 'Cada ruta necesita una unidad asignada antes de poder crear sus corridas: la unidad define el acomodo de asientos de cada viaje. El paso de Unidades tiene una asignación rápida, o asígnalas una por una en el panel de administración — luego vuelve a leer.'
             : 'Todas las rutas tienen unidad asignada — el importador puede calcular el aforo de cada corrida.'}
       </p>
     </div>
@@ -309,7 +420,8 @@ function Screen() {
   const router = useRouter()
 
   const [pool, setPool] = useState<Partial<Record<SlotKey, File>>>({})
-  const [runs, setRuns] = useState<Partial<Record<number, RunState>>>({})
+  const [runs, setRuns] = useState<Partial<Record<RunKey, RunState>>>({})
+  const [selectedUnitId, setSelectedUnitId] = useState('')
 
   if (!data.ok) {
     return (
@@ -379,6 +491,30 @@ function Screen() {
     if (result.ok) await router.invalidate()
   }
 
+  async function runRestore(def: StepDef, index: number) {
+    if (!def.restoreTarget) return
+    const restore = def.restoreTarget === 'catalog' ? restoreCatalog : restoreUnits
+
+    setRuns((r) => ({ ...r, [index]: { status: 'running' } }))
+    const result = await restore()
+    setRuns((r) => ({
+      ...r,
+      [index]: result.ok ? { status: 'done', report: result.report } : { status: 'failed', failure: result.failure },
+    }))
+    if (result.ok) await router.invalidate()
+  }
+
+  async function runAssign() {
+    if (!selectedUnitId) return
+    setRuns((r) => ({ ...r, assign: { status: 'running' } }))
+    const result = await assignUnitToRoutes({ data: { unitId: selectedUnitId } })
+    setRuns((r) => ({
+      ...r,
+      assign: result.ok ? { status: 'done', report: result.report } : { status: 'failed', failure: result.failure },
+    }))
+    if (result.ok) await router.invalidate()
+  }
+
   return (
     <>
       <PageHeader
@@ -405,8 +541,18 @@ function Screen() {
           <div className="p-5">
             {currentDef.kind === 'clean' ? (
               <CleanPanel def={currentDef} run={currentRun} onClean={runClean} />
-            ) : currentDef.kind === 'status' ? (
-              <VerifyPanel def={currentDef} status={status} />
+            ) : currentDef.kind === 'restore' ? (
+              <RestorePanel
+                def={currentDef}
+                status={status}
+                run={currentRun}
+                onRestore={() => runRestore(currentDef, paso)}
+                assign={
+                  currentDef.restoreTarget === 'units'
+                    ? { unitId: selectedUnitId, onUnitChange: setSelectedUnitId, run: runs.assign, onAssign: runAssign }
+                    : undefined
+                }
+              />
             ) : (
               <>
                 {paso === tripsIndex ? <TripsGate status={status} /> : null}
@@ -420,7 +566,7 @@ function Screen() {
                     paso === tripsIndex && isTripsBlocked
                       ? status.routes === 0
                         ? 'Bloqueado: todavía no hay rutas importadas'
-                        : `Bloqueado: ${integer(status.routesWithoutUnit)} de ${integer(status.routes)} rutas sin unidad`
+                        : `Bloqueado: ${integer(status.routesWithoutUnit)} de ${integer(status.routes)} rutas sin unidad — revisa el paso de Unidades`
                       : null
                   }
                 />
