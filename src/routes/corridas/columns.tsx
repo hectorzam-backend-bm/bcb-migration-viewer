@@ -14,7 +14,13 @@ import type { TripRow } from '~/server/trips'
    never migrated: `Operator`, `Bus`, `TripPlanning`, `TripDispatch` and
    `TripSeat` are all empty in the connected database (see the plan). They are
    plain `display` columns that always print `SIN_DATO`, held together behind
-   one rule and demoted to `text-ink-4` — one visible fact, not five. */
+   one rule and demoted to `text-ink-4` — one visible fact, not five.
+
+   `Boletos` links to `/boletos?trip=<id>`, but its figure comes from
+   `TripPassengerType.ticketsSold` — a counter carried over from the legacy
+   CSV, not a count of `OrderItem` rows. The destination can legitimately show
+   a different number; that disagreement is itself a migration-health fact
+   worth surfacing, not hiding. */
 
 const TRIP_STATUS_TONE: Record<string, 'active' | 'inactive' | 'warning'> = {
   OPEN: 'active',
@@ -148,9 +154,16 @@ export const tripColumns = helper.columns([
     header: 'Boletos',
     enableSorting: false,
     meta: { numeric: true, skeletonWidth: 5 },
-    cell: ({ getValue }) => {
+    cell: ({ row, getValue }) => {
       const value = getValue()
-      return <span className={value === 0 ? 'text-amber' : undefined}>{integer(value)}</span>
+      if (value === 0) return <span className="text-amber">{integer(value)}</span>
+      return (
+        <span title="Ver los boletos migrados de esta corrida — este conteo viene del CSV legado (ticketsSold), no de contar boletos">
+          <TextLink to="/boletos" search={{ trip: [row.original.id] }} className="relative">
+            {integer(value)}
+          </TextLink>
+        </span>
+      )
     },
   }),
   helper.accessor('priceOneWay', {

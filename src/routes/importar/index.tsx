@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { RotateCw, TriangleAlert } from 'lucide-react'
+import { ChevronRight, RotateCw, TriangleAlert } from 'lucide-react'
 import { Label, Rule, Sheet, Stamp, Stat } from '~/components/base'
 import { PageHeader } from '~/components/shell'
 import { ErrorState, SkeletonBar } from '~/components/states'
@@ -10,9 +10,10 @@ import { NO_DATA, integer, plural } from '~/lib/format'
 import { integerParam, stripDefaults } from '~/lib/params'
 import { cleanDatabase, getImportStatus, runImport } from '~/server/seeds'
 import type { ImportReport, ImportStatus } from '~/server/seeds'
-import { assignUnitToRoutes, restoreCatalog, restoreUnits } from '~/server/restore'
+import { assignUnitToRoutes, getRestorePreview, restoreCatalog, restoreUnits } from '~/server/restore'
+import type { RestorePreview } from '~/server/restore'
 import { STEPS } from './steps'
-import type { SlotKey, StepDef } from './steps'
+import type { RestoreTarget, SlotKey, StepDef } from './steps'
 import { Stepper } from './stepper'
 import { FileDrop } from './dropzone'
 import { ReportPanel } from './report'
@@ -184,6 +185,96 @@ function CleanPanel({ def, run, onClean }: { def: StepDef; run: RunState | undef
   )
 }
 
+type PreviewState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'done'; preview: RestorePreview }
+  | { status: 'failed'; failure: SeedsFailure }
+
+/**
+ * A collapsed-by-default look at what the backup file actually contains,
+ * fetched on first open rather than from the route loader: it's static
+ * bundled data (doesn't change while the app runs), cheap to read, and only
+ * two of the eight steps ever show it — no reason to fetch it for the other
+ * six. `<details>` over a modal: the wizard uses no dialogs anywhere else.
+ */
+function RestorePreviewDisclosure({ target }: { target: RestoreTarget | undefined }) {
+  const [state, setState] = useState<PreviewState>({ status: 'idle' })
+
+  async function load() {
+    setState({ status: 'loading' })
+    const result = await getRestorePreview()
+    setState(result.ok ? { status: 'done', preview: result.preview } : { status: 'failed', failure: result.failure })
+  }
+
+  if (!target) return null
+
+  return (
+    <details
+      className="group mt-4"
+      onToggle={(e) => {
+        if (e.currentTarget.open && state.status === 'idle') void load()
+      }}
+    >
+      <summary
+        className={cn(
+          'flex cursor-pointer list-none items-center gap-1.5 select-none',
+          '[&::-webkit-details-marker]:hidden',
+          'font-mono text-note font-medium tracking-[0.08em] text-ink-3 uppercase hover:text-ink-2',
+        )}
+      >
+        <ChevronRight size={12} strokeWidth={2} aria-hidden className="transition-transform duration-150 group-open:rotate-90" />
+        Ver qué hay en el respaldo
+      </summary>
+
+      <div className="mt-3">
+        {state.status === 'loading' ? <SkeletonBar className="w-full" /> : null}
+        {state.status === 'failed' ? <RunFailure failure={state.failure} onRetry={load} /> : null}
+        {state.status === 'done' ? (
+          target === 'units' ? (
+            <ul className="max-h-64 divide-y divide-rule-faint overflow-y-auto">
+              {state.preview.units.map((u) => (
+                <li key={u.name} className="flex items-baseline justify-between gap-4 py-1.5">
+                  <span className="min-w-0 truncate text-body text-ink-2">
+                    {u.name} <span className="text-note text-ink-4">{u.type}{u.deleted ? ' · eliminada' : ''}</span>
+                  </span>
+                  <span data-numeric className="shrink-0 font-mono text-data text-ink">
+                    {plural(u.capacity, 'asiento', 'asientos')}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div>
+                <Label className="mb-2">Empresas</Label>
+                <ul className="max-h-64 divide-y divide-rule-faint overflow-y-auto">
+                  {state.preview.companies.map((c) => (
+                    <li key={c.key} className="py-1.5 text-body text-ink-2">
+                      <span className="font-mono text-note text-ink-4">{c.key}</span> {c.name}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <Label className="mb-2">Servicios</Label>
+                <ul className="max-h-64 divide-y divide-rule-faint overflow-y-auto">
+                  {state.preview.services.map((s) => (
+                    <li key={s.key} className="py-1.5 text-body text-ink-2">
+                      <span className="font-mono text-note text-ink-4">{s.key}</span> {s.name}{' '}
+                      <span className="text-note text-ink-4">({s.companyKey})</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )
+        ) : null}
+      </div>
+    </details>
+  )
+}
+
 /**
  * Serves both `restoreTarget`s: "Empresas y servicios" (`catalog`) and
  * "Unidades" (`units`). The assign control is `units`-only and optional —
@@ -252,6 +343,8 @@ function RestorePanel({
           el visor.
         </span>
       </div>
+
+      <RestorePreviewDisclosure target={def.restoreTarget} />
 
       {run?.status === 'done' && run.report ? <ReportPanel title={def.title} report={run.report} /> : null}
       {run?.status === 'failed' ? <RunFailure failure={run.failure} onRetry={onRestore} /> : null}
@@ -383,11 +476,16 @@ function UploadPanel({
 
       <div className="mt-5 flex flex-wrap items-center gap-3">
         {disabledReason ? (
-          <span title={disabledReason}>
+          <>
             <button type="button" disabled className={ACTION_BUTTON_CLASS}>
               Importar
             </button>
-          </span>
+            {/* Visible text, not just a hover `title`: Corridas repeats this
+                reason in `TripsGate`, but Boletos has no gate card of its
+                own — the reason has to be readable without a mouse here. */}
+            <Stamp tone="warning">Bloqueado</Stamp>
+            <span className="text-body text-ink-2">{disabledReason}</span>
+          </>
         ) : (
           <button type="button" onClick={onSubmit} disabled={!canSubmit} className={ACTION_BUTTON_CLASS}>
             {isRunning ? (
@@ -450,7 +548,14 @@ function Screen() {
   // Mirrors `TripsGate`'s own `blocked`: no routes at all is blocked too, not
   // just "some routes lack a unit" — see the comment there.
   const isTripsBlocked = status.routes === 0 || status.routesWithoutUnit > 0
-  const blockedIndex = isTripsBlocked ? tripsIndex : null
+  // Mirrors what the backend actually rejects with NO_TRIPS_IMPORTED /
+  // NO_PASSENGER_TYPES_IMPORTED.
+  const isBoletosBlocked = status.trips === 0 || status.passengerTypes === 0
+  const blockedFlags = STEPS.map(
+    (s) =>
+      (s.importStep === 'trips' && isTripsBlocked) || (s.importStep === 'boletos' && isBoletosBlocked),
+  )
+  const blockedTitles = STEPS.filter((_, i) => blockedFlags[i]).map((s) => s.title)
   const doneCount = doneFlags.filter(Boolean).length
   const currentRun = runs[paso]
 
@@ -522,7 +627,12 @@ function Screen() {
         subtitle={
           <>
             {doneCount} de {STEPS.length} pasos con datos en la base
-            {blockedIndex !== null ? <span className="text-amber"> · Corridas bloqueado</span> : null}
+            {blockedTitles.length > 0 ? (
+              <span className="text-amber">
+                {' · '}
+                {blockedTitles.join(' y ')} {blockedTitles.length > 1 ? 'bloqueados' : 'bloqueado'}
+              </span>
+            ) : null}
           </>
         }
         actions={<RefreshButton />}
@@ -534,7 +644,7 @@ function Screen() {
             titles={STEPS.map((s) => s.title)}
             current={paso}
             doneFlags={doneFlags}
-            blockedIndex={blockedIndex}
+            blockedFlags={blockedFlags}
             onSelect={goToStep}
           />
 
@@ -563,10 +673,14 @@ function Screen() {
                   run={currentRun}
                   onSubmit={() => runUpload(currentDef, paso)}
                   disabledReason={
-                    paso === tripsIndex && isTripsBlocked
-                      ? status.routes === 0
-                        ? 'Bloqueado: todavía no hay rutas importadas'
-                        : `Bloqueado: ${integer(status.routesWithoutUnit)} de ${integer(status.routes)} rutas sin unidad — revisa el paso de Unidades`
+                    blockedFlags[paso]
+                      ? currentDef.importStep === 'trips'
+                        ? status.routes === 0
+                          ? 'Todavía no hay rutas importadas — sube primero el paso de Rutas.'
+                          : `${integer(status.routesWithoutUnit)} de ${integer(status.routes)} rutas sin unidad — revisa el paso de Unidades.`
+                        : status.trips === 0
+                          ? 'Todavía no hay corridas importadas — sube primero el paso de Corridas.'
+                          : 'No hay tipos de pasajero en la base. Los crea el paso de Corridas al leer LIMITE_PASAJERO.csv.'
                       : null
                   }
                 />

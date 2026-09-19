@@ -2,13 +2,21 @@ import { plural } from '~/lib/format'
 import type { ImportStatus, ImportStep } from '~/server/seeds'
 
 /**
- * The 7 steps of the wizard, in the order the backend requires. This table is
+ * The wizard's steps, in the order the backend requires. This table is
  * the single source of truth `index.tsx` walks to render the strip and each
  * panel — see `~/server/seeds`'s `IMPORT_STEPS` for the matching field names
  * each upload step forwards.
  */
 
-export type SlotKey = 'stations' | 'routes' | 'segments' | 'services' | 'tariffs' | 'corridas' | 'limits'
+export type SlotKey =
+  | 'stations'
+  | 'routes'
+  | 'segments'
+  | 'services'
+  | 'tariffs'
+  | 'corridas'
+  | 'limits'
+  | 'boletos'
 
 export type Slot = { key: SlotKey; label: string; legacyFile: string }
 
@@ -126,5 +134,17 @@ export const STEPS: ReadonlyArray<StepDef> = [
     ],
     status: (s) =>
       s.trips > 0 ? { done: true, note: plural(s.trips, 'corrida', 'corridas') } : { done: false, note: 'Sin corridas todavía.' },
+  },
+  {
+    kind: 'upload',
+    title: 'Boletos',
+    description:
+      'Sube boletos.csv. Crea las órdenes, los boletos, sus pasajeros, los asientos de cada corrida y un movimiento por boleto. Bloqueado hasta que existan corridas y tipos de pasajero — el paso de Corridas crea ambos. El importador no lee el correo, el teléfono, el asesor, la caja real, el corte ni el descuento: esos campos quedan vacíos en el visor.',
+    importStep: 'boletos',
+    slots: [{ key: 'boletos', label: 'Boletos', legacyFile: 'boletos.csv' }],
+    status: (s) =>
+      s.tickets > 0
+        ? { done: true, note: `${plural(s.tickets, 'boleto', 'boletos')} · ${plural(s.orders, 'orden', 'órdenes')}` }
+        : { done: false, note: 'Sin boletos todavía.' },
   },
 ]

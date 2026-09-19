@@ -109,13 +109,23 @@ lo nuevo, con los nombres reales actuales.
   `src/components/data-table.tsx`) abre un `border-l border-rule` antes de una
   columna, agrupando visualmente las columnas que nunca llegaron con la migración
   (Operador, Autobús, Planeación, Despacho, Capacidad) en `text-ink-4`.
-- **Regla de datos — horarios de corrida vs. instantes reales**: `Trip.departure` /
-  `dispatchedAt` / `arrival` / `realDepartureAt` / `realArrivalAt` son valores de
-  horario "de pared" sin zona horaria real; el driver `pg` los interpreta como UTC.
-  Sus formateadores (`time`, `dayLabel`, `dayLabelFull`, `monthLabel` en
-  `~/lib/format`) fijan `timeZone: 'UTC'` — nunca uses `date`/`dateTime` (sin fijar)
-  para ellos. `createdAt`/`updatedAt` sí son instantes reales y siguen usando
-  `date`/`dateTime` tal cual.
+- **Regla de datos — horarios de corrida vs. instantes reales (corregida 2026-09)**:
+  `Trip.departure` / `dispatchedAt` / `arrival` / `realDepartureAt` / `realArrivalAt`
+  SÍ son instantes reales, pero desplazados: el backend los escribe 6h por delante
+  de la hora local del CSV (`dateTimeTZ`, y ninguna columna es `@db.Timestamptz`),
+  así que leerlos de vuelta exige restar esas 6h — ver `LEGACY_OFFSET_HOURS` /
+  `toLegacyLocal` en `~/lib/format`. `time` (y `legacyDateTime`, para boletos) hacen
+  ese ajuste antes de formatear; `dayLabel`/`dayLabelFull`/`monthLabel` NO lo
+  necesitan — siempre reciben una cadena `YYYY-MM-DD` ya resuelta (por `toIsoDate`
+  en `~/server/trips`), nunca el instante crudo. `createdAt`/`updatedAt` de
+  cualquier otro modelo sí son instantes reales sin desplazar y siguen usando
+  `date`/`dateTime` tal cual. (Esta nota reemplaza una versión anterior que
+  afirmaba justo lo contrario —"sin zona horaria real", "el driver `pg` los
+  interpreta como UTC"— y que dejaba cada corrida 6 horas tarde en pantalla y
+  partía la ventana de 7 días del CSV legado en 8 cubetas UTC; corregido y
+  verificado contra la base conectada: `Trip.departure` agrupaba en
+  568/701/696/733/715/662/800/139 por día UTC, y en 705/692/705/753/691/694/774
+  —7 días limpios— tras el ajuste.)
 - `~/lib/params` ganó `isoDate` (valida `YYYY-MM-DD`).
 - El identificador legado ("clave de corrida") no desapareció en la migración: es
   literalmente `Trip.id` (nunca un uuid) — verificado contra las 5,014 filas.
@@ -152,6 +162,56 @@ aquí, directo con Prisma (`src/server/restore.ts`) — la única pantalla donde
 - **Atajo de migración, dicho en voz alta**: la asignación masiva de unidad a rutas (misma
   pantalla) es una decisión que el asistente toma por conveniencia, no una regla de negocio. El
   texto junto al botón lo dice explícitamente — no se disfraza de flujo normal.
+- **Firma nueva — la vista previa del respaldo** (pasos Empresas/servicios y Unidades): un
+  `<details>` nativo, colapsado por defecto, no un modal — el asistente no usa diálogos en ningún
+  otro lado. El triángulo por defecto del navegador se oculta (`list-none` +
+  `[&::-webkit-details-marker]:hidden`) a favor de un `ChevronRight` que gira con `group-open:`,
+  para que se lea como el resto de los controles de la página y no como un widget nativo suelto.
+  Se carga al abrirse, no desde el loader de la ruta: es texto estático del bundle, no vale la pena
+  pedirlo en los seis pasos que nunca lo muestran.
+
+## Boletos — adiciones (2026-09)
+
+`/boletos` es el último catálogo de la cadena de importación (empresas → servicios →
+terminales → rutas → corridas → **boletos**) y el primero que muestra datos
+transaccionales, no un catálogo maestro. "Boleto" es `OrderItem` — no existe un
+modelo `Ticket`.
+
+- **Ausencia deliberada — sin `DayStrip`**: a diferencia de corridas, el día de venta
+  es un filtro más entre varios, no la unidad de organización — no hay un "día" que
+  domine sobre el resto de los hechos de un boleto. La lista es un manifiesto plano
+  con `FilterBar` + `Pagination`, igual que empresas/servicios/terminales/rutas.
+- **Firma nueva — `DayFilter`** (dentro de `src/routes/boletos/index.tsx`, no
+  compartido, mismo criterio que `Checkbox` en cada catálogo): un `<input
+  type="date">` nativo con la misma superficie que un `ListFilter` con selección
+  activa — el segundo control de formulario nativo del visor después del `<select>`
+  de Unidades en `/importar`.
+- **La banda sin migrar se redujo a tres columnas**: asesor, caja y no. de corte —
+  `boletos.csv` no trae ninguno de los tres y el importador nunca los escribe.
+  **Terminal de venta y Canal de venta NO están en la banda**, a propósito: la
+  estación de Terminal de venta se resuelve contra `Station.shortName` (dato legado
+  genuino); lo sintético es sólo la caja específica que la contiene (`CashRegister`
+  de relleno, un placeholder por estación) — esa caja sí va en la banda.
+- **La pila de estatus no imita la captura de referencia**: la pantalla de Admin que
+  sirvió de referencia pinta una insignia verde en cada fila. Este visor reutiliza
+  `Stamp tone="active"` tal cual —un punto olivo y texto en `text-tinta-2`, sin
+  fondo— que ya es la lectura callada que pide "jerarquía por excepción"; sólo
+  `CANCELED` (`warning`, fondo ámbar) rompe el silencio. No se introdujo un tercer
+  idioma de estatus (texto plano sin `Stamp`) sólo para esta tabla.
+- **"Tipo de operación" no es una columna almacenada**: el CSV la traía
+  (VT/VA/CN/HO/AC), pero el importador no la conserva — sólo sobrevive como una
+  secuencia de `OrderItemStatusHistory` sobre el `PAID` que el propio importador
+  siempre escribe. `src/server/tickets.ts`'s `classifyMovements` la reconstruye con
+  una regla de desempate explícita (ver el comentario ahí): el movimiento no-PAID
+  más reciente gana, y el empate se resuelve a favor de "no fue sólo una venta" —
+  necesario porque una fila de ciclo de vida puede compartir el instante exacto de
+  su fila de venta cuando su propia fecha no se pudo parsear.
+- **El enlace `/corridas` → `/boletos` dice en voz alta que puede mentir**: la
+  columna `Boletos` de corridas cuenta `TripPassengerType.ticketsSold` —un
+  contador del CSV legado, no un conteo de `OrderItem`— y el destino filtrado puede
+  mostrar otro número. El enlace se ofrece de todas formas (esa discrepancia es en
+  sí misma un hallazgo de salud de la migración), pero el `title` del enlace y la
+  copia del estado vacío de `/boletos?trip=` lo dicen explícitamente.
 
 ## Reglas de datos
 

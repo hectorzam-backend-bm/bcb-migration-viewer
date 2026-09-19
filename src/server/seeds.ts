@@ -34,6 +34,7 @@ const IMPORT_STEPS = {
   segments: { path: '/seeds/import/segments', fields: ['segments', 'routes'] },
   tariffs: { path: '/seeds/import/tariffs', fields: ['tariffs'] },
   trips: { path: '/seeds/import/trips', fields: ['corridas', 'limits'] },
+  boletos: { path: '/seeds/import/boletos', fields: ['boletos'] },
 } as const satisfies Record<string, { path: string; fields: ReadonlyArray<string> }>
 
 export type ImportStep = keyof typeof IMPORT_STEPS
@@ -48,6 +49,10 @@ const API_ERROR_HINTS: Record<string, string> = {
     'Todavía no hay terminales importadas — sube primero el paso "Terminales".',
   'errors.SEEDS.NO_ROUTES_IMPORTED':
     'Todavía no hay rutas importadas — sube primero el paso "Rutas".',
+  'errors.SEEDS.NO_TRIPS_IMPORTED':
+    'Todavía no hay corridas importadas — sube primero el paso "Corridas".',
+  'errors.SEEDS.NO_PASSENGER_TYPES_IMPORTED':
+    'No hay tipos de pasajero en la base. Los crea el paso "Corridas" al leer LIMITE_PASAJERO.csv — vuelve a ese paso antes de subir los boletos.',
   'errors.SEEDS.FILE_REQUIRED': 'Falta un archivo en la solicitud.',
 }
 
@@ -121,7 +126,7 @@ async function apiFailure(response: Response): Promise<Failure> {
 }
 
 /* ── Estado ───────────────────────────────────────────────────────────────
-   Everything the 7 step cards need, in one read. All read-only counts —
+   Everything the step cards need, in one read. All read-only counts —
    the write lock in `./db.ts` never sees anything but `count()` here. */
 
 export type ImportStatus = {
@@ -144,6 +149,14 @@ export type ImportStatus = {
   tripSeats: number
   operators: number
   buses: number
+  /** Second half of the boletos gate — the Corridas step creates these
+   *  from LIMITE_PASAJERO.csv. */
+  passengerTypes: number
+  /** The Boletos step's report counts ORDERS in `created` (rows sharing
+   *  TRANSACCION_NUMERO collapse into one) — this and `tickets` let the
+   *  step's own status note show both nouns before the report ever runs. */
+  orders: number
+  tickets: number
 }
 
 export type StatusResponse = { ok: true; status: ImportStatus } | { ok: false; failure: Failure }
@@ -168,6 +181,9 @@ export const getImportStatus = createServerFn({ method: 'GET' }).handler(
         tripSeats,
         operators,
         buses,
+        passengerTypes,
+        orders,
+        tickets,
       ] = await Promise.all([
         db.state.count(),
         db.company.count({ where: { deletedAt: null } }),
@@ -189,6 +205,9 @@ export const getImportStatus = createServerFn({ method: 'GET' }).handler(
         db.tripSeat.count(),
         db.operator.count(),
         db.bus.count({ where: { deletedAt: null } }),
+        db.passengerType.count({ where: { deletedAt: null } }),
+        db.order.count(),
+        db.orderItem.count(), // `OrderItem` has no `deletedAt`
       ])
       const unitOptions = unitRows.map((u) => ({
         id: u.id,
@@ -214,6 +233,9 @@ export const getImportStatus = createServerFn({ method: 'GET' }).handler(
           tripSeats,
           operators,
           buses,
+          passengerTypes,
+          orders,
+          tickets,
         },
       }
     } catch (error) {

@@ -27,6 +27,13 @@ export const REASON_LABELS: Record<string, string> = {
   INVALID_DEPARTURE: 'Fecha y hora de salida inválida',
   PASSENGER_TYPE_NOT_FOUND: 'No se encontró el tipo de pasajero',
   TRIP_NOT_FOUND_FOR_LIMIT: 'El límite no corresponde a ninguna corrida',
+  // Del paso de Boletos.
+  TRIP_NOT_FOUND: 'No se encontró la corrida',
+  MISSING_TRIP_LINK: 'El boleto no apunta a ninguna corrida',
+  FOLIO_MISSING_SALE_ROW: 'El folio no trae su fila de venta',
+  DUPLICATE_SALE_ROW_FOR_FOLIO: 'Más de una fila de venta para el mismo folio',
+  REFERENCED_OPERATION_EXCLUDED: 'La operación que referencia quedó fuera de la importación',
+  ALREADY_IMPORTED: 'El boleto ya estaba importado',
   // Del restore de JSON (`~/server/restore`), no del API.
   ALREADY_EXISTS_WITH_OTHER_ID: 'Ya existe una fila con esa clave, bajo otro id',
   COMPANY_NOT_FOUND: 'No se encontró la empresa',
@@ -46,6 +53,15 @@ export const COUNTER_LABELS: Record<string, string> = {
   operatorsUnresolved: 'Operadores sin resolver',
   busesUnresolved: 'Autobuses sin resolver',
   negativeTicketsSoldClamped: 'Boletos vendidos negativos ajustados a 0',
+  // Del paso de Boletos.
+  orderItemsCreated: 'Boletos creados',
+  passengersCreated: 'Pasajeros creados',
+  orderItemStatusHistoryCreated: 'Movimientos de boleto creados',
+  tripSeatsCreated: 'Asientos de corrida creados',
+  cashRegistersCreated: 'Cajas de relleno creadas',
+  seatNumberMissing: 'Boletos sin número de asiento',
+  passengerTypeUnresolved: 'Tipos de pasajero sin resolver',
+  paymentMethodCodeUnrecognized: 'Formas de pago no reconocidas',
   // Del restore de JSON (`~/server/restore`), no del API.
   companiesUpdated: 'Empresas actualizadas',
   servicesUpdated: 'Servicios actualizados',
@@ -56,13 +72,18 @@ export const COUNTER_LABELS: Record<string, string> = {
 }
 
 /** Counters worth flagging amber: gaps in the data, not routine outcomes of
- *  re-running an idempotent import. */
+ *  re-running an idempotent import. `cashRegistersCreated` deliberately stays
+ *  out — it is a creation count, not a deficit; the placeholder fact is
+ *  already carried by its own label ("de relleno"), not by its color. */
 const AMBER_COUNTERS = new Set([
   'operatorsUnresolved',
   'busesUnresolved',
   'routesWithoutTariff',
   'segmentsWithoutTariff',
   'negativeTicketsSoldClamped',
+  'seatNumberMissing',
+  'passengerTypeUnresolved',
+  'paymentMethodCodeUnrecognized',
 ])
 
 function LabeledCounts({
@@ -112,7 +133,14 @@ export function ReportPanel({ title, report }: { title: string; report: ImportRe
       <Label>Reporte — {title}</Label>
 
       <div className="mt-3 grid gap-5 sm:grid-cols-2">
-        <Stat value={integer(report.created)} label="Creados" />
+        <Stat
+          value={integer(report.created)}
+          label="Creados"
+          // El paso de Boletos cuenta ÓRDENES en `created` — una orden puede
+          // traer varios boletos (ida+regreso, o varios pasajeros comprados
+          // juntos). Se detecta por su propio contador, no por el título.
+          note={report.counters?.orderItemsCreated !== undefined ? 'Órdenes — los boletos se cuentan abajo' : undefined}
+        />
         <Stat value={integer(report.skipped)} label="Descartados" />
       </div>
 

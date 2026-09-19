@@ -18,6 +18,7 @@ import {
   minutes,
   plural,
   time,
+  toLegacyLocal,
 } from '~/lib/format'
 import type { StationRef, TripDetail, TripPassengerTypeDetail, TripSegmentDetail } from '~/server/trips'
 import { getTrip } from '~/server/trips'
@@ -199,7 +200,10 @@ function Screen() {
   }
 
   const trip = data.trip
-  const day = trip.departure.slice(0, 10)
+  // `trip.departure` is the raw stored (shifted) instant's ISO string — its
+  // own UTC calendar day is not the local one. See `~/lib/format`'s
+  // `LEGACY_OFFSET_HOURS` note.
+  const day = toLegacyLocal(new Date(trip.departure)).toISOString().slice(0, 10)
   const durationMinutes = trip.arrival
     ? Math.round((new Date(trip.arrival).getTime() - new Date(trip.departure).getTime()) / 60000)
     : null
@@ -238,6 +242,15 @@ function Screen() {
               label="Boletos vendidos"
               value={integer(trip.ticketsSold)}
               tone={trip.ticketsSold === 0 ? 'amber' : 'ink'}
+              // `ticketsSold` es un contador del CSV legado, no un conteo de
+              // OrderItem — el destino filtrado puede mostrar otro número.
+              note={
+                trip.ticketsSold > 0 ? (
+                  <TextLink to="/boletos" search={{ trip: [trip.id] }}>
+                    Ver el manifiesto
+                  </TextLink>
+                ) : undefined
+              }
             />
             <Stat label="Tarifa sencilla" value={currency(trip.priceOneWay)} tone="stamp" />
             <Stat

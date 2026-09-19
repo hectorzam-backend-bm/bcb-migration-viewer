@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '~/lib/cn'
 import { NO_DATA, integer, monthLabel, plural } from '~/lib/format'
 import { parseIsoDate } from '~/server/trips'
@@ -21,10 +21,9 @@ const BAR_HEIGHT = 26
  * The manifest's signature: the day is the unit, not a filter. Each cell
  * plots real weight — a bar sized by that day's trip count, never a
  * fabricated split — so the strip reads as a small histogram of the month,
- * not just a row of buttons. `‹ ›` move by month, `Ir a fecha` jumps anywhere
- * via the native date picker, and `Hoy` always reaches the real calendar
- * date, even into a month the migration never touched — that gap is itself
- * worth seeing, not hidden.
+ * not just a row of buttons. `‹ ›` move by month, and `Hoy` always reaches
+ * the real calendar date, even into a month the migration never touched —
+ * that gap is itself worth seeing, not hidden.
  */
 export function DayStrip({
   days,
@@ -57,25 +56,6 @@ export function DayStrip({
                 Spanish only capitalizes the first letter of the phrase. */}
             {monthLabel(monthAnchor).replace(/^\p{L}/u, (c) => c.toUpperCase())}
           </span>
-          <div
-            className={cn(
-              'relative inline-flex h-7 items-center gap-1.5 rounded-chip border border-rule border-dashed px-2.5',
-              'font-mono text-note font-medium tracking-[0.06em] text-ink-2 uppercase transition-colors duration-100',
-              'hover:border-rule-strong hover:border-solid hover:bg-row',
-            )}
-          >
-            <CalendarDays size={12} strokeWidth={1.75} aria-hidden />
-            Ir a fecha
-            <input
-              type="date"
-              value={selected}
-              onChange={(e) => {
-                if (e.target.value) onSelect(e.target.value)
-              }}
-              aria-label="Ir a una fecha específica"
-              className="absolute inset-0 cursor-pointer opacity-0"
-            />
-          </div>
         </div>
 
         <div className="flex items-center gap-3">

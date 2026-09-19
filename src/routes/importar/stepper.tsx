@@ -12,13 +12,13 @@ export function Stepper({
   titles,
   current,
   doneFlags,
-  blockedIndex,
+  blockedFlags,
   onSelect,
 }: {
   titles: ReadonlyArray<string>
   current: number
   doneFlags: ReadonlyArray<boolean>
-  blockedIndex: number | null
+  blockedFlags: ReadonlyArray<boolean>
   onSelect: (index: number) => void
 }) {
   const chipRefs = useRef<Array<HTMLButtonElement | null>>([])
@@ -41,7 +41,7 @@ export function Stepper({
       <ol className="flex gap-1 overflow-x-auto px-4 pb-3">
         {titles.map((title, i) => {
           const isCurrent = i === current
-          const isBlocked = i === blockedIndex
+          const isBlocked = blockedFlags[i] ?? false
           const isDone = doneFlags[i] ?? false
           return (
             <li key={title} className="shrink-0">

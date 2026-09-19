@@ -77,6 +77,56 @@ function prismaErrorCode(error: unknown): string | undefined {
 type Failure = ReturnType<typeof describeFailure>
 type RestoreResponse = { ok: true; report: ImportReport } | { ok: false; failure: Failure }
 
+/* ── Vista previa ─────────────────────────────────────────────────────────
+   A trimmed, human-readable read of the same dumps — not the raw rows (no
+   ids, audit fields, or the dangling FKs described above), just enough to
+   show what a restore is about to write before anyone clicks the button. */
+
+export type RestorePreview = {
+  companies: Array<{ key: string; name: string }>
+  services: Array<{ key: string; name: string; companyKey: string }>
+  units: Array<{ name: string; type: string; capacity: number; deleted: boolean }>
+}
+
+export type PreviewResponse = { ok: true; preview: RestorePreview } | { ok: false; failure: Failure }
+
+export const getRestorePreview = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<PreviewResponse> => {
+    try {
+      const { companies, services, units, unitDecks } = requireAssets()
+
+      const companyKeyById = new Map(companies.map((c) => [c.id, c.key]))
+      const capacityByUnitId = new Map<string, number>()
+      for (const deck of unitDecks) {
+        capacityByUnitId.set(deck.unitId, (capacityByUnitId.get(deck.unitId) ?? 0) + deck.capacity)
+      }
+
+      return {
+        ok: true,
+        preview: {
+          companies: companies
+            .map((c) => ({ key: c.key, name: c.tradeName }))
+            .sort((a, b) => a.name.localeCompare(b.name)),
+          services: services
+            .map((s) => ({ key: s.key, name: s.shortName, companyKey: companyKeyById.get(s.companyId) ?? '?' }))
+            .sort((a, b) => a.name.localeCompare(b.name)),
+          units: units
+            .map((u) => ({
+              name: u.name,
+              type: u.type,
+              capacity: capacityByUnitId.get(u.id) ?? 0,
+              deleted: !!u.deletedAt,
+            }))
+            .sort((a, b) => a.name.localeCompare(b.name)),
+        },
+      }
+    } catch (error) {
+      console.error('[restore-preview]', error)
+      return { ok: false, failure: describeFailure(error) }
+    }
+  },
+)
+
 /**
  * Upserts each row by id, classifying every outcome instead of throwing:
  * `created` / `updated` from a successful write, or a named `reason` (via

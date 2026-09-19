@@ -2,15 +2,20 @@ import { createServerFn } from '@tanstack/react-start'
 import type { Prisma } from '@prisma/generated'
 import { db, describeFailure } from './db'
 import { clampPage, range } from '~/lib/params'
+import { LEGACY_OFFSET_HOURS, toLegacyLocal } from '~/lib/format'
 
 /**
  * Corridas — trips over a route on a single day.
  *
  * `Trip.departure`/`dispatchedAt`/`arrival`/`realDepartureAt`/`realArrivalAt`
- * are naked `DateTime` columns holding a schedule's wall-clock value, not an
- * observed instant: the `pg` driver parses them as UTC, so every date
- * boundary here is computed in UTC too — mixing zones would put the wrong
- * trips on the wrong day. `createdAt`/`updatedAt` stay ordinary instants.
+ * are stored 6h ahead of the local wall clock they came from — see
+ * `~/lib/format`'s `LEGACY_OFFSET_HOURS` for the mechanism and the live-data
+ * evidence. Every date boundary here is built in that shifted (stored) space
+ * via `LEGACY_OFFSET_HOURS`, and every calendar-day bucket is read back via
+ * `toLegacyLocal`, so a local calendar day of trips is what actually groups
+ * together — building boundaries in plain UTC would put the wrong trips on
+ * the wrong day (verified: it used to split a 7-day CSV export into 8 UTC-day
+ * buckets). `createdAt`/`updatedAt` stay ordinary, unshifted instants.
  */
 
 export const TRIP_SORTS = [
@@ -118,24 +123,27 @@ export function parseIsoDate(dateIso: string): { year: number; month: number; da
   }
 }
 
+/** Local midnight of day D is the stored instant `D 06:00 UTC` — see the file
+ *  header's note on `LEGACY_OFFSET_HOURS`. */
 function dayBoundsUTC(dateIso: string) {
   const { year, month, day } = parseIsoDate(dateIso)
   return {
-    start: new Date(Date.UTC(year, month - 1, day)),
-    end: new Date(Date.UTC(year, month - 1, day + 1)),
+    start: new Date(Date.UTC(year, month - 1, day, LEGACY_OFFSET_HOURS)),
+    end: new Date(Date.UTC(year, month - 1, day + 1, LEGACY_OFFSET_HOURS)),
   }
 }
 
 function monthBoundsUTC(dateIso: string) {
   const { year, month } = parseIsoDate(dateIso)
   return {
-    start: new Date(Date.UTC(year, month - 1, 1)),
-    end: new Date(Date.UTC(year, month, 1)),
+    start: new Date(Date.UTC(year, month - 1, 1, LEGACY_OFFSET_HOURS)),
+    end: new Date(Date.UTC(year, month, 1, LEGACY_OFFSET_HOURS)),
   }
 }
 
+/** The local calendar day of a stored (shifted) instant. */
 function toIsoDate(d: Date): string {
-  return d.toISOString().slice(0, 10)
+  return toLegacyLocal(d).toISOString().slice(0, 10)
 }
 
 /** No `date` in the URL: land on the latest day with migrated trips instead
