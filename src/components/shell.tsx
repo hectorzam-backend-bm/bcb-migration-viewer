@@ -12,6 +12,7 @@ export type Counts = {
   stations: number
   routes: number
   segments: number
+  trips: number
 }
 
 const SECTIONS = [
@@ -19,6 +20,7 @@ const SECTIONS = [
   { to: '/servicios', label: 'Servicios', countKey: 'services' },
   { to: '/terminales', label: 'Terminales', countKey: 'stations' },
   { to: '/rutas', label: 'Rutas y tramos', countKey: 'routes' },
+  { to: '/corridas', label: 'Corridas', countKey: 'trips' },
 ] as const
 
 /* ── Rail ─────────────────────────────────────────────────────────────────

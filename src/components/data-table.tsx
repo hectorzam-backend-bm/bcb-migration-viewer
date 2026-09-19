@@ -35,6 +35,9 @@ export type ColumnMeta = {
   className?: string
   /** This column's share (0–100) of `ManifestSkeleton`'s loading placeholder. */
   skeletonWidth?: number
+  /** Opens a `border-l` before this column, binding it and everything after
+   *  it into one visual band — e.g. corridas' un-migrated columns. */
+  groupStart?: boolean
 }
 
 export type Columns<TData extends RowData> = ReadonlyArray<
@@ -57,7 +60,7 @@ function HeaderCell<TData extends RowData>({
   const meta = header.column.columnDef.meta
   if (!header.column.getCanSort()) {
     return (
-      <Th numeric={meta?.numeric}>
+      <Th numeric={meta?.numeric} className={cn(meta?.groupStart && 'border-l border-rule')}>
         {flexRender(header.column.columnDef.header, header.getContext())}
       </Th>
     )
@@ -67,7 +70,7 @@ function HeaderCell<TData extends RowData>({
   return (
     <Th
       numeric={meta?.numeric}
-      className="p-0"
+      className={cn('p-0', meta?.groupStart && 'border-l border-rule')}
       aria-sort={direction ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'}
     >
       <button
@@ -137,7 +140,11 @@ export function DataTable<TData extends RowData>({
             {row.getAllCells().map((cell) => {
               const meta = cell.column.columnDef.meta
               return (
-                <Td key={cell.id} numeric={meta?.numeric} className={meta?.className}>
+                <Td
+                  key={cell.id}
+                  numeric={meta?.numeric}
+                  className={cn(meta?.className, meta?.groupStart && 'border-l border-rule')}
+                >
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </Td>
               )

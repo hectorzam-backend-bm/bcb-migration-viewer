@@ -95,6 +95,31 @@ Sólo `transform` y `opacity`, nunca `transition: all`. Colores 100 ms; popovers
 `rango` `paginaValida` `DIRECCIONES` `TAMANOS`
 `~/lib/cn` → `cn`
 
+## Corridas — adiciones (2026-09)
+
+Nota: las entradas de arriba nombran componentes en español (`Sello`, `Clave`…) de
+antes del commit que tradujo los identificadores a inglés; los nombres reales hoy son
+`Stamp`, `KeyText`, etc. No se corrigió ese desfase al añadir esto — solo se documenta
+lo nuevo, con los nombres reales actuales.
+
+- **Firma nueva — `DayStrip`** (`src/routes/corridas/day-strip.tsx`, no compartido):
+  el día es la unidad, no un filtro. Tira de chips por día con su conteo en mono;
+  `‹ ›` mueve por mes, `Hoy` salta al día real aunque esté fuera de lo migrado.
+- **Firma nueva — la banda sin migrar**: `ColumnMeta.groupStart` (nuevo campo en
+  `src/components/data-table.tsx`) abre un `border-l border-rule` antes de una
+  columna, agrupando visualmente las columnas que nunca llegaron con la migración
+  (Operador, Autobús, Planeación, Despacho, Capacidad) en `text-ink-4`.
+- **Regla de datos — horarios de corrida vs. instantes reales**: `Trip.departure` /
+  `dispatchedAt` / `arrival` / `realDepartureAt` / `realArrivalAt` son valores de
+  horario "de pared" sin zona horaria real; el driver `pg` los interpreta como UTC.
+  Sus formateadores (`time`, `dayLabel`, `dayLabelFull`, `monthLabel` en
+  `~/lib/format`) fijan `timeZone: 'UTC'` — nunca uses `date`/`dateTime` (sin fijar)
+  para ellos. `createdAt`/`updatedAt` sí son instantes reales y siguen usando
+  `date`/`dateTime` tal cual.
+- `~/lib/params` ganó `isoDate` (valida `YYYY-MM-DD`).
+- El identificador legado ("clave de corrida") no desapareció en la migración: es
+  literalmente `Trip.id` (nunca un uuid) — verificado contra las 5,014 filas.
+
 ## Reglas de datos
 
 - Toda celda sin valor imprime `SIN_DATO` (`—`), nunca queda en blanco.

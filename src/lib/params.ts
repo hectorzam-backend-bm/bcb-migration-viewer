@@ -54,6 +54,13 @@ export function oneOf<const T extends ReadonlyArray<string>>(
     : fallback
 }
 
+/** A plain `YYYY-MM-DD` calendar date, or '' when absent/invalid. Corridas'
+ *  day strip and `Trip.departure` both work in whole UTC calendar days —
+ *  see `src/server/trips.ts`. */
+export function isoDate(value: unknown): string {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : ''
+}
+
 export const DIRECTIONS = ['asc', 'desc'] as const
 export type Direction = (typeof DIRECTIONS)[number]
 
