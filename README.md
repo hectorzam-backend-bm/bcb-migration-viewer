@@ -5,13 +5,13 @@ rutas con sus tramos. Sin login ni autenticación: está pensado para correr con
 
 ```
 pnpm install
-cp .env.example .env     # y apunta DATABASE_URL a tu Postgres local
-pnpm dev                 # http://localhost:3000
+cp .env.example .env     # DATABASE_URL a tu Postgres local, SEEDS_API_URL al backend local
+pnpm dev                 # http://localhost:4000
 ```
 
 ## Sólo lectura, con dos candados
 
-Este visor nunca escribe. La garantía no depende de que la interfaz no tenga botones:
+Este visor nunca escribe **en la base**. La garantía no depende de que la interfaz no tenga botones:
 
 1. **En la aplicación** — el cliente Prisma de `src/server/db.ts` lleva una extensión que rechaza
    toda operación que no sea de lectura (`findMany`, `findFirst`, `count`, `aggregate`, `groupBy`…).
@@ -19,6 +19,11 @@ Este visor nunca escribe. La garantía no depende de que la interfaz no tenga bo
    proceso.
 2. **En la base** — se recomienda apuntar `DATABASE_URL` a un usuario con permisos únicamente de
    `SELECT`. El candado de la aplicación sigue valiendo aunque el usuario tuviera permisos de más.
+
+La única excepción está en `/importar`: sube los CSV del catálogo legado y los reenvía por HTTP a
+los endpoints `/seeds/*` del backend (`src/server/seeds.ts`, con la URL en `SEEDS_API_URL`) — sin
+autenticación, pensados para correr en local. Quien escribe es el backend; el Prisma de este visor
+sigue detrás de los dos candados de arriba.
 
 No hay migraciones en este repo. `prisma generate` es lo único que se ejecuta; `db push` y
 `migrate` no forman parte de ningún script.
@@ -72,7 +77,7 @@ La configuración del CLI vive en `prisma.config.ts`, porque Prisma 7 ya no lee 
 
 | Comando | Qué hace |
 | --- | --- |
-| `pnpm dev` | servidor de desarrollo en el puerto 3000 |
+| `pnpm dev` | servidor de desarrollo en el puerto 4000 |
 | `pnpm build` | compilación de producción |
 | `pnpm start` | sirve la compilación (`server.mjs`, puerto 3000 o `PORT`) |
 | `pnpm db:generate` | regenera el cliente Prisma a `generated/prisma` |
@@ -90,8 +95,10 @@ src/
   styles/app.css            tokens del sistema de diseño
   server/
     db.ts                   cliente Prisma de sólo lectura + traducción de fallas
+    seeds.ts                reenvía CSV a /seeds/* del backend — la única escritura del visor
     <sección>.ts            funciones de servidor por catálogo
   routes/                   rutas por archivo de TanStack Router
+    importar/               asistente de carga: pasos, zona de soltado, reporte
     <catálogo>/columns.tsx  columnas de TanStack Table de ese manifiesto
   components/
     table.tsx               vocabulario visual: Th, Td, TableRow, RowLink, Pagination…

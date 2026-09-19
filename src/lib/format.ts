@@ -128,6 +128,16 @@ export function monthLabel(value: string): string {
   return MONTH_LABEL.format(new Date(`${value}T00:00:00Z`))
 }
 
+/** Size of a file staged for upload, before it goes anywhere. Base 1024. */
+export function bytes(value: number): string {
+  if (value < 1024) return `${INTEGER.format(value)} B`
+  const kb = value / 1024
+  // Compare the rounded value, not the raw one: a file at e.g. 1023.93 KB
+  // rounds to 1024 and belongs in the MB branch, or it prints as "1,024 KB".
+  if (Math.round(kb) < 1024) return `${INTEGER.format(Math.round(kb))} KB`
+  return `${DECIMAL_1.format(kb / 1024)} MB`
+}
+
 export function coordinate(value: number | null | undefined): string {
   if (value === null || value === undefined) return NO_DATA
   return value.toFixed(6)

@@ -33,6 +33,7 @@
     "pg": "^8.23.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "react-dropzone": "^20.1.2",
     "srvx": "^1.0.5",
     "tailwind-merge": "^3.7.0"
   },

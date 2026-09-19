@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
 import type { LinkProps } from '@tanstack/react-router'
-import { Database } from 'lucide-react'
+import { Database, Upload } from 'lucide-react'
 import { cn } from '~/lib/cn'
 import { integer } from '~/lib/format'
 import { ThemeToggle } from './theme'
@@ -21,7 +21,10 @@ const SECTIONS = [
   { to: '/terminales', label: 'Terminales', countKey: 'stations' },
   { to: '/rutas', label: 'Rutas y tramos', countKey: 'routes' },
   { to: '/corridas', label: 'Corridas', countKey: 'trips' },
-] as const
+  // Sin countKey a propósito: no es un catálogo, es una acción — no tiene un
+  // conteo de "lo vigente" que mostrar.
+  { to: '/importar', label: 'Importar' },
+] as const satisfies ReadonlyArray<{ to: string; label: string; countKey?: keyof Counts }>
 
 /* ── Rail ─────────────────────────────────────────────────────────────────
    224 px: navigation serves the content, it does not compete with it. It shares
@@ -32,7 +35,7 @@ export function Rail({ counts }: { counts?: Counts }) {
 
   return (
     <nav
-      aria-label="Catálogos"
+      aria-label="Navegación del visor"
       className={cn(
         // On small screens the rail is a top bar: a fixed 224 px width would eat
         // more than half of a phone. From lg it becomes the 224 px column again,
@@ -60,9 +63,12 @@ export function Rail({ counts }: { counts?: Counts }) {
       <ul className="flex flex-1 flex-row gap-1 lg:flex-col lg:gap-0.5 lg:px-3 lg:py-3">
         {SECTIONS.map((s) => {
           const isActive = pathname === s.to || pathname.startsWith(`${s.to}/`)
-          const n = counts?.[s.countKey]
+          const n = 'countKey' in s ? counts?.[s.countKey] : undefined
           return (
-            <li key={s.to} className="relative">
+            <li
+              key={s.to}
+              className={cn('relative', !('countKey' in s) && 'lg:mt-3 lg:border-t lg:border-rule lg:pt-3')}
+            >
               <Link
                 to={s.to}
                 className={cn(
@@ -81,6 +87,9 @@ export function Rail({ counts }: { counts?: Counts }) {
                     isActive ? 'opacity-100' : 'opacity-0',
                   )}
                 />
+                {!('countKey' in s) ? (
+                  <Upload size={12} strokeWidth={1.75} aria-hidden className="shrink-0 text-ink-3" />
+                ) : null}
                 <span className={cn('font-serif text-body', isActive && 'font-medium')}>
                   {s.label}
                 </span>

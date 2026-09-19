@@ -120,6 +120,30 @@ lo nuevo, con los nombres reales actuales.
 - El identificador legado ("clave de corrida") no desapareció en la migración: es
   literalmente `Trip.id` (nunca un uuid) — verificado contra las 5,014 filas.
 
+## Importar — adiciones (2026-09)
+
+`/importar` es la única excepción a la primera línea de este documento ("nada que sugiera que se
+puede tocar"): un asistente por pasos que sube CSV y los reenvía al backend de origen. La excepción
+está acotada a esa ruta — ningún otro catálogo gana un botón de escritura, y el visor sigue sin
+escribir en su propia base: quien escribe es el backend, por HTTP (`src/server/seeds.ts`).
+
+- **Firma nueva — la tira de pasos** (`src/routes/importar/stepper.tsx`, no compartida, mismo
+  criterio que `DayStrip`): chips con estado hecho / actual / bloqueado / pendiente. El estado
+  `actual` siempre gana el color (acento `sello`), igual que en `DayStrip`; lo bloqueado se lee por
+  el candado dentro del chip y por el texto alrededor, no por robarle el color a `actual`.
+- **Firma nueva — la zona de soltado** (`src/routes/importar/dropzone.tsx`): `bg-hundido` con borde
+  punteado, como cualquier campo de entrada. Una zona por archivo, nunca una zona múltiple con
+  adivinanza de nombres — cada slot tiene un destino sin ambigüedad.
+- **Excepción a "el estado vive en la URL"**: los `File` elegidos no sobreviven una recarga (no son
+  serializables), así que viven en `useState`, no en la URL. Sólo el paso actual (`?paso=`) viaja en
+  la dirección. Al recargar, los archivos se pierden pero los conteos —que sí vienen de la base—
+  no; la pantalla es honesta sobre cuál de los dos es la fuente de verdad.
+- **Bloqueado no es error**: el paso de Corridas se pinta en tono `ambar` (aviso), nunca `oxido`
+  (falla), cuando faltan rutas por asignar unidad — es el estado por defecto de una base recién
+  migrada, no una falla del asistente.
+- Ningún `Button` compartido nuevo: los botones de `/importar` reusan el recetario que ya vivía
+  pegado en `refresh.tsx` y `states.tsx`, copiado tal cual.
+
 ## Reglas de datos
 
 - Toda celda sin valor imprime `SIN_DATO` (`—`), nunca queda en blanco.
