@@ -23,12 +23,12 @@ model Service {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  // Purely informational — no effect on how the system runs. Only the HCM sync writes it
-  // (services-hcm-sync.service.ts): true when GER returns ESTATUS="N" or when the service stops
-  // appearing in the report. hcmLastSeenRunId is the runId of the last run that brought it
-  // (or that skipped it over a conflict, without marking it absent); it detects absences with no
-  // in-memory state and distinguishes services managed by HCM (!= null) from those created by
-  // hand through CRUD (null), which must never be marked. Same pattern as Company.hcmDisabled.
+  // Meramente informativo — sin efecto en el funcionamiento del sistema. Lo escribe solo el sync
+  // HCM (services-hcm-sync.service.ts): true cuando GER retorna ESTATUS="N" o cuando el servicio
+  // deja de venir en el reporte. hcmLastSeenRunId es el runId de la última corrida que lo trajo
+  // (o que lo omitió por un conflicto, sin marcarlo ausente); permite detectar ausencias sin
+  // estado en memoria y distingue servicios gestionados por HCM (!= null) de los creados a mano
+  // por CRUD (null), que nunca deben marcarse. Mismo patrón que Company.hcmDisabled.
   hcmDisabled      Boolean @default(false)
   hcmLastSeenRunId String?
 
@@ -52,6 +52,7 @@ model Service {
   couponCampaigns    CouponCampaign[]    @relation("CouponCampaignServices")
   agencyRfcs         AgencyRfcService[]
   fikFocSchemeRoutes FikFocSchemeRoute[]
+  priceAdjustments   PriceAdjustment[]
 
   @@index([deletedAt])
 }
@@ -67,11 +68,11 @@ model Company {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  // Purely informational — no effect on how the system runs. Only the HCM sync writes it
-  // (companies-hcm-sync.service.ts): true when GER returns ESTATUS="N" or when the company stops
-  // appearing in the report. hcmLastSeenRunId is the runId of the last run that brought it;
-  // it detects absences with no in-memory state and distinguishes companies managed by HCM
-  // (!= null) from those created by hand through CRUD (null), which must never be marked.
+  // Meramente informativo — sin efecto en el funcionamiento del sistema. Lo escribe solo el sync
+  // HCM (companies-hcm-sync.service.ts): true cuando GER retorna ESTATUS="N" o cuando la empresa
+  // deja de venir en el reporte. hcmLastSeenRunId es el runId de la última corrida que la trajo;
+  // permite detectar ausencias sin estado en memoria y distingue empresas gestionadas por HCM
+  // (!= null) de las creadas a mano por CRUD (null), que nunca deben marcarse.
   hcmDisabled      Boolean @default(false)
   hcmLastSeenRunId String?
 
@@ -172,10 +173,10 @@ model Route {
   collectionType    CollectionType
   priceOneWay       Decimal        @db.Decimal(10, 2)
   priceRound        Decimal?       @db.Decimal(10, 2)
-  travelTimeMinutes Int // Travel time in minutes
-  distanceKm        Float // Distance in kilometers
-  stayTimeMinutes   Int // Stay time in minutes
-  appliedIVA        Boolean        @default(false) // Whether IVA is applied
+  travelTimeMinutes Int // Tiempo de viaje en minutos
+  distanceKm        Float // Distancia en kilómetros
+  stayTimeMinutes   Int // Tiempo de estancia en minutos
+  appliedIVA        Boolean        @default(false) // Indica si se aplica IVA
   hasSeatsSelection Boolean        @default(true)
   isActive          Boolean        @default(true)
   deletedAt         DateTime?
@@ -202,17 +203,18 @@ model Route {
   updatedById String?
   updatedBy   Admin?  @relation("RouteUpdatedBy", fields: [updatedById], references: [id])
 
-  segments           Segment[]
-  salesChannels      RouteSalesChannel[]
-  passengerTypes     RoutePassengerType[]
-  trips              Trip[]
-  stops              CourtesyStop[]
-  tripsXlsxTemplates TripTemplate[]
-  promotions         Promotion[]
-  advanceSales       AdvanceSale[]
-  couponCampaigns    CouponCampaign[]
-  orderItems         OrderItem[]
-  fikFocSchemeRoutes FikFocSchemeRoute[]
+  segments              Segment[]
+  salesChannels         RouteSalesChannel[]
+  passengerTypes        RoutePassengerType[]
+  trips                 Trip[]
+  stops                 CourtesyStop[]
+  tripsXlsxTemplates    TripTemplate[]
+  promotions            Promotion[]
+  advanceSales          AdvanceSale[]
+  couponCampaigns       CouponCampaign[]
+  orderItems            OrderItem[]
+  fikFocSchemeRoutes    FikFocSchemeRoute[]
+  priceAdjustmentRoutes PriceAdjustmentRoute[]
 
   @@index([deletedAt])
 }
@@ -224,15 +226,15 @@ enum CollectionType {
 
 model Segment {
   id              String   @id @default(uuid())
-  number          String
-  stayTimeMinutes Int // Stay time in minutes
-  durationMinutes Int      @default(0) // Travel time of the segment
+  order           Int // 0 = tramo principal; 1..N el resto
+  stayTimeMinutes Int // Tiempo de estancia en minutos
+  durationMinutes Int      @default(0) // Tiempo de viaje del tramo
   distanceKm      Float?
-  allowSale       Boolean  @default(true) // To be removed soon
+  allowSale       Boolean  @default(true) // Proximo a eliminarse
   isActive        Boolean  @default(true)
-  isMain          Boolean  @default(false) // Main segment (origin-destination of the route)
-  priceOneWay     Decimal  @db.Decimal(10, 2) // One-way fare
-  priceRound      Decimal? @db.Decimal(10, 2) // Round-trip fare (optional)
+  isMain          Boolean  @default(false) // Tramo principal (origen-destino de la ruta)
+  priceOneWay     Decimal  @db.Decimal(10, 2) // Tarifa sencilla
+  priceRound      Decimal? @db.Decimal(10, 2) // Tarifa redonda (opcional)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -248,11 +250,12 @@ model Segment {
   salesChannels  SegmentSalesChannel[]
   orderItems     OrderItem[]
 
-  deletedAt    DateTime?
-  tripSegments TripSegment[]
+  deletedAt               DateTime?
+  tripSegments            TripSegment[]
+  priceAdjustmentSegments PriceAdjustmentSegment[]
 
-  @@unique([routeId, number])
   @@unique([routeId, isMain], where: { isMain: true, deletedAt: null })
+  @@index([routeId, order])
   @@index([deletedAt])
 }
 
@@ -333,6 +336,10 @@ model PassengerType {
   seats         TripSeat[]
   passengers    Passenger[]
 
+  /// Movimientos que dejaron el boleto con este tipo de pasajero
+  /// (`OrderItemStatusHistory.newPassengerTypeId`).
+  movementTargets OrderItemStatusHistory[]
+
   services                  Service[]                  @relation("ServicePassengerTypes")
   tripSegmentPassengerTypes TripSegmentPassengerType[]
   purchaseCouponCampaigns   CouponCampaign[]           @relation("CouponCampaignPurchasePassengerType")
@@ -342,7 +349,7 @@ model PassengerType {
 }
 
 model RoutePassengerType {
-  seatingLimit Int? // Null when there is no limit
+  seatingLimit Int? // Null cuando no hay límite
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -586,9 +593,9 @@ model TripSeat {
   passengerTypeId String?
   lockedAt        DateTime?
   tripId          String
-  // Segment of the current hold (AVAILABLE -> HOLD). Cleared on release
-  // (HOLD -> AVAILABLE); a stale value on a BOOKED seat is harmless
-  // because every capacity read filters status: HOLD.
+  // Tramo del apartado vigente (AVAILABLE -> HOLD). Se limpia al liberar
+  // (HOLD -> AVAILABLE); un valor rancio en un asiento BOOKED es inofensivo
+  // porque toda lectura de cupo filtra status: HOLD.
   tripSegmentId   String?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
@@ -628,7 +635,7 @@ model TravelCard {
   status       TravelCardStatus @default(OPEN)
   departure    DateTime
   tomTomFailed Boolean          @default(false)
-  tomTomTripId Int?             @unique // nViaje en InRoute (filled in on a successful sync)
+  tomTomTripId Int?             @unique // nViaje en InRoute (se llena al sincronizar con éxito)
 
   tripId String @unique
   trip   Trip   @relation(fields: [tripId], references: [id])
@@ -678,7 +685,7 @@ model TravelCardReprint {
 model TravelCardCollection {
   id               String  @id @default(uuid())
   collectionNumber Int     @unique
-  expectedAmount   Decimal @db.Decimal(14, 2) // Amount calculated by the system at collection time
+  expectedAmount   Decimal @db.Decimal(14, 2) // Monto calculado por el sistema al momento de recaudar
 
   travelCardId String     @unique
   travelCard   TravelCard @relation(fields: [travelCardId], references: [id])
@@ -707,13 +714,13 @@ model TravelCardAmountLine {
 }
 
 enum CollectionConcept {
-  SYSTEM_SALES // System sale (Those tickets that were scanned by the operator but not sold by them)
-  ONBOARD_SALES // Onboard sale (Tickets sold by the operator)
-  MANUAL_SALES // Manual sale (Adjustments during collection)
-  PREPAID_TICKETS // Prepaid: Tickets paid for with a prepaid card
-  PREPAID_RECHARGES // Prepaid: Recharges to prepaid cards
-  PREPAID_SALES // Prepaid: Prepaid card sales
-  PENALTY // Penalty at collection time
+  SYSTEM_SALES // Venta de sistema (Aquellos boletos que fueron escaneados por el operador pero no vendidos por el mismo)
+  ONBOARD_SALES // Venta a bordo (Boletos vendidos por el operador)
+  MANUAL_SALES // Venta manual (Ajustes en la recolección)
+  PREPAID_TICKETS // Prepago: Boletos pagados mediante tarjeta de prepago
+  PREPAID_RECHARGES // Prepago: Recargas a tarjetas de prepago
+  PREPAID_SALES // Prepago: Ventas de tarjetas de prepago
+  PENALTY // Penalización al momento de la recaudación
 }
 
 model TravelCardStatusLog {
@@ -799,21 +806,21 @@ enum CashRegisterStatus {
   UNASSIGNED
 }
 
-// Cash register cut types
+// Tipos de corte de caja
 enum CashRegisterShiftType {
-  SHIFT // Cut per shift (individual)
-  DAILY // Daily cut
-  TERMINAL // Terminal-wide cut
-  TICKET_OFFICE // Ticket office
+  SHIFT // Corte por turno (individual)
+  DAILY // Corte diario
+  TERMINAL // Corte de terminal
+  TICKET_OFFICE // Taquilla
   TICKET_OFFICE_OFFLINE // Ticket collector offline
 }
 
-// Cash register cut statuses
+// Estados del corte de caja
 enum CashRegisterShiftStatus {
-  OPEN // Active shift, advisor working
-  IN_PROCESS // Coordinator performing the cut
-  RECONCILED // Reconciled with no differences
-  RECONCILED_WITH_DIFFERENCE // Reconciled with differences
+  OPEN // Turno activo, asesor trabajando
+  IN_PROCESS // Coordinador realizando corte
+  RECONCILED // Conciliado sin diferencias
+  RECONCILED_WITH_DIFFERENCE // Conciliado con diferencias
 }
 
 model CashRegister {
@@ -843,7 +850,6 @@ model CashRegister {
   activeOperator       Operator?                @relation("CashRegisterActiveOperator", fields: [activeOperatorId], references: [id], onDelete: SetNull)
   miscellaneousSales   MiscellaneousSale[]
   orders               Order[]
-  loyaltyWallets       LoyaltyWallet[]
   prepaidCardSales     PrepaidCardSale[]
   prepaidCardRecharges PrepaidCardRecharge[]
   ticketMovements      OrderItemStatusHistory[]
@@ -859,17 +865,17 @@ enum CashRegisterDevice {
   MOBILE_BOARDING
 }
 
-// Cash Register Cut model (Shift)
+// Modelo de Corte de Caja (Shift)
 model CashRegisterShift {
   id                String                  @id @default(uuid())
   shiftType         CashRegisterShiftType
   status            CashRegisterShiftStatus @default(OPEN)
-  openingCashAmount Decimal                 @default(0) @db.Decimal(14, 2) // Starting amount when the shift opens
+  openingCashAmount Decimal                 @default(0) @db.Decimal(14, 2) // Monto inicial al abrir el turno
 
-  // Whether Ticket Collector Offline (TCO) has already synced its sale into BCB
+  // Indica si Ticket Collector Offline (TCO) ya sincronizó su venta en BCB
   isTCOSync Boolean @default(false)
 
-  // Sequential cut number (per cash register)
+  // Número secuencial del corte (por caja)
   shiftNumber Int
 
   advisorUserId String?
@@ -894,7 +900,7 @@ model CashRegisterShift {
   discrepancyNotes String? @db.Text
   coordinatorNotes String? @db.Text
 
-  // Audit
+  // Auditoría
   coordinatorId String?
   coordinator   Admin?  @relation("ShiftCoordinator", fields: [coordinatorId], references: [id])
   createdById   String?
@@ -904,13 +910,13 @@ model CashRegisterShift {
 
   lockedById    String?
   lockedBy      Admin?    @relation("ShiftLockedBy", fields: [lockedById], references: [id])
-  lockedAt      DateTime? // Timestamp of when it was locked
-  lockExpiresAt DateTime? // Automatic lock expiry (e.g. 5 minutes)
+  lockedAt      DateTime? // Timestamp de cuando se bloqueó
+  lockExpiresAt DateTime? // Expiración automática del bloqueo (ej: 5 minutos)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   deletedAt     DateTime?
 
-  // Relations
+  // Relaciones
   cashBreakdown        CashBreakdown?
   amountLines          ShiftAmountLine[]
   cashCollections      CashCollection[]
@@ -935,8 +941,8 @@ enum ShiftPaymentMethod {
 }
 
 enum ShiftConcept {
-  // Cash and card
-  TOTAL // Only applies to CASH and CARD (systemCashTotal*, systemCardTotal*)
+  // Efectivo y Tarjeta
+  TOTAL // Solo aplica a CASH y CARD (systemCashTotal*, systemCardTotal*)
   ONE_WAY_ROUND_TICKETS
   OPEN_TICKETS
   COUPON_TICKETS
@@ -951,7 +957,7 @@ enum ShiftConcept {
   REFUNDS
   PENALTIES
 
-  // Others (paymentMethod = OTHER)
+  // Otros (paymentMethod = OTHER)
   LOYALTY_PROGRAM
   TRAVEL_ORDERS
   TRANSFER_TICKETS
@@ -962,7 +968,7 @@ enum ShiftConcept {
   SCHEDULE_CHANGES
 }
 
-// ─── NORMALIZED MODEL ───
+// ─── MODELO NORMALIZADO ───
 model ShiftAmountLine {
   id String @id @default(uuid())
 
@@ -972,31 +978,31 @@ model ShiftAmountLine {
   paymentMethod ShiftPaymentMethod
   concept       ShiftConcept
 
-  // System (calculated automatically)
+  // Sistema (calculado automáticamente)
   systemCount  Int     @default(0)
   systemAmount Decimal @default(0) @db.Decimal(14, 2)
 
-  // Declared by the advisor/coordinator
+  // Declarado por el asesor/coordinador
   declaredCount  Int?
   declaredAmount Decimal? @db.Decimal(14, 2)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Each shift + method + concept combination is unique
+  // Cada combinación shift + método + concepto es única
   @@unique([shiftId, paymentMethod, concept])
   @@index([shiftId])
   @@index([paymentMethod, concept])
 }
 
-// Physical cash breakdown (bills and coins)
+// Desglose de efectivo físico (billetes y monedas)
 model CashBreakdown {
   id String @id @default(uuid())
 
   shiftId String            @unique
   shift   CashRegisterShift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
 
-  // Bills (count of each denomination)
+  // Billetes (cantidad de cada denominación)
   bills1000 Int @default(0)
   bills500  Int @default(0)
   bills200  Int @default(0)
@@ -1004,7 +1010,7 @@ model CashBreakdown {
   bills50   Int @default(0)
   bills20   Int @default(0)
 
-  // Coins
+  // Monedas
   coins20  Int @default(0)
   coins10  Int @default(0)
   coins5   Int @default(0)
@@ -1012,18 +1018,18 @@ model CashBreakdown {
   coins1   Int @default(0)
   coins050 Int @default(0) // $0.50
 
-  // Calculated total
+  // Total calculado
   totalAmount Decimal @db.Decimal(14, 2)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-// Cash collection from the register
+// Recolección de efectivo de caja
 model CashCollection {
   id                  String  @id @default(uuid())
-  amount              Decimal @db.Decimal(14, 2) // Amount collected
-  isOpeningCashAmount Boolean @default(false) // true if it is a register opening, false if it is a normal collection
+  amount              Decimal @db.Decimal(14, 2) // Monto recolectado
+  isOpeningCashAmount Boolean @default(false) // true si es apertura de caja, false si es recolección normal
 
   shiftId String
   shift   CashRegisterShift @relation(fields: [shiftId], references: [id])
@@ -1039,8 +1045,8 @@ model CashCollection {
   @@index([deletedAt])
 }
 
-// Cash on hand for the advisor, per station. All the registers at the same
-// station share a single balance; changing station does reset it to 0.
+// Efectivo en mano del asesor, por estación. Todas las cajas de una misma
+// estación comparten un solo saldo; cambiar de estación sí resetea a 0.
 model AdvisorStationBalance {
   id          String  @id @default(uuid())
   currentCash Decimal @default(0) @db.Decimal(14, 2)
@@ -1065,9 +1071,9 @@ enum PaymentType {
   PAYMENT_WITH_TRAVEL_ORDER
   TRANSFER_PASS
   COMPLIMENTARY
-  EXCHANGE //System sale: Those that were scanned.
-  PREPAID //Tickets: Those you pay for with prepaid
-  RELOAD //Recharges: Balance top-up on a prepaid card
+  EXCHANGE //Venta sistema: Aquellos que se escanearon.
+  PREPAID //Boletos: Aquellos que pagas con prepago
+  RELOAD //Recargas: Recarga de saldo en una tarjeta de prepago
 }
 
 enum UserStatus {
@@ -1149,22 +1155,6 @@ model Admin {
   updatedShifts                      CashRegisterShift[]           @relation("ShiftUpdatedBy")
   lockedShifts                       CashRegisterShift[]           @relation("ShiftLockedBy")
   createdCashCollections             CashCollection[]              @relation("CashCollectionCreatedBy")
-  createdLoyaltyWallets              LoyaltyWallet[]               @relation("LoyaltyWalletCreatedBy")
-  updatedLoyaltyWallets              LoyaltyWallet[]               @relation("LoyaltyWalletUpdatedBy")
-  createdLoyaltyTransactions         LoyaltyTransaction[]          @relation("LoyaltyTransactionCreatedBy")
-  updatedLoyaltyTransactions         LoyaltyTransaction[]          @relation("LoyaltyTransactionUpdatedBy")
-  createdLoyaltyPointBuckets         LoyaltyPointBucket[]          @relation("LoyaltyPointBucketCreatedBy")
-  updatedLoyaltyPointBuckets         LoyaltyPointBucket[]          @relation("LoyaltyPointBucketUpdatedBy")
-  createdLoyaltyBucketUsages         LoyaltyBucketUsage[]          @relation("LoyaltyBucketUsageCreatedBy")
-  updatedLoyaltyBucketUsages         LoyaltyBucketUsage[]          @relation("LoyaltyBucketUsageUpdatedBy")
-  createdLoyaltyDetailsByServices    LoyaltyDetailsByService[]     @relation("LoyaltyDetailsByServiceCreatedBy")
-  updatedLoyaltyDetailsByServices    LoyaltyDetailsByService[]     @relation("LoyaltyDetailsByServiceUpdatedBy")
-  createdLoyalityLegalByServices     LoyalityLegalByService[]      @relation("LoyalityLegalByServiceCreatedBy")
-  updatedLoyalityLegalByServices     LoyalityLegalByService[]      @relation("LoyalityLegalByServiceUpdatedBy")
-  createdLoyalityBanner              LoyalityBanner[]              @relation("LoyalityBannerCreatedBy")
-  updatedLoyalityBanner              LoyalityBanner[]              @relation("LoyalityBannerUpdatedBy")
-  createdLoyalityBannerByServices    LoyalityBannerByService[]     @relation("LoyalityBannerByServiceCreatedBy")
-  updatedLoyalityBannerByServices    LoyalityBannerByService[]     @relation("LoyalityBannerByServiceUpdatedBy")
   updatedTravelCards                 TravelCard[]                  @relation("TravelCardUpdatedBy")
   collectedTravelCards               TravelCardCollection[]        @relation("TravelCardCollectionCollectedBy")
   collectorShifts                    CollectorShift[]              @relation("CollectorShiftCollector")
@@ -1197,6 +1187,8 @@ model Admin {
   createdMobileSkus                  MobileSku[]                   @relation("MobileSkuCreatedBy")
   updatedMobileSkus                  MobileSku[]                   @relation("MobileSkuUpdatedBy")
   orders                             Order[]                       @relation("CourtesyAuthorizerAdmin")
+  createdPriceAdjustments            PriceAdjustment[]             @relation("PriceAdjustmentCreatedBy")
+  updatedPriceAdjustments            PriceAdjustment[]             @relation("PriceAdjustmentUpdatedBy")
 }
 
 model AdminsDepartment {
@@ -1290,7 +1282,7 @@ model AdminPermissionAccess {
 
 model AdminSession {
   id                   String   @id @default(uuid())
-  /// Cognito AuthenticationResult.AccessToken — never expose in API responses.
+  /// Cognito AuthenticationResult.AccessToken — nunca exponer en respuestas de API.
   accessToken          String?
   accessTokenExpiresAt DateTime
   createdAt            DateTime @default(now())
@@ -1311,12 +1303,12 @@ model TripTemplate {
 
 model AdvisorUser {
   id          String          @id @default(uuid())
-  key         String          @unique // ER key
+  key         String          @unique // Clave ER
   name        String
   shift       Shift
   type        AdvisorUserType
   isActive    Boolean         @default(true)
-  /// @deprecated global balance replaced by AdvisorCashRegisterBalance (per-register balance)
+  /// @deprecated saldo global reemplazado por AdvisorCashRegisterBalance (saldo por caja)
   currentCash Decimal?        @db.Decimal(14, 2)
   deletedAt   DateTime?
   createdAt   DateTime        @default(now())
@@ -1402,11 +1394,11 @@ model Promotion {
   ticketsSold    Int          @default(0)
   discountType   DiscountType
   discountValue  Float
-  ticketsPaid    Int? // only for discountType = VOLUME
-  ticketLimit    Int? // only for discountType = TICKET_LIMIT
+  ticketsPaid    Int? // solo para discountType = VOLUME
+  ticketLimit    Int? // solo para discountType = TICKET_LIMIT
 
   discountAppliesTo      DiscountAppliesTo @default(ORDER_TOTAL)
-  discountTicketQuantity Int? // only for discountAppliesTo = TICKET_QUANTITY
+  discountTicketQuantity Int? // solo para discountAppliesTo = TICKET_QUANTITY
 
   priority             Int              @default(0)
   status               PromotionStatus  @default(CREATED)
@@ -1480,7 +1472,7 @@ model TripValidity {
   startTime DateTime @db.Time
   endTime   DateTime @db.Time
   allDays   Boolean
-  sameDay   Boolean  @default(false) //only for RoundTripValidity
+  sameDay   Boolean  @default(false) //solo para RoundTripValidity
 
   roundTrip   Promotion? @relation("RoundTripValidity", fields: [roundTripId], references: [id])
   roundTripId String?    @unique
@@ -1578,7 +1570,6 @@ model Client {
   PaymentMethodClient             PaymentMethodClient[]
   orderItemStatusHistoriesChanged OrderItemStatusHistory[]       @relation("StatusHistoryChangedByClient")
   orderItemStatusHistories        OrderItemStatusHistory[]
-  loyaltyWallet                   LoyaltyWallet?
   clientOccupation                ClientOccupation?              @relation(fields: [clientOccupationid], references: [id])
   clientOccupationid              String?
   clientResponses                 ClientResponses[]
@@ -1589,7 +1580,7 @@ model ClientSocialAccount {
   id                String   @id @default(uuid())
   clientId          String
   provider          Provider
-  providerUserId    String // provider id/sub
+  providerUserId    String // id/sub del proveedor
   emailFromProvider String?  @db.VarChar(254)
   createdAt         DateTime @default(now())
 
@@ -1605,12 +1596,13 @@ enum FirebaseApp {
 }
 
 model ClientFirebaseIdentity {
-  id           String      @id @default(uuid())
-  clientId     String
-  firebaseApp  FirebaseApp @default(PLATAFORMA_DIGITAL)
-  firebaseUid  String      @db.VarChar(128)
-  passwordHash String?     @db.VarChar(255)
-  createdAt    DateTime    @default(now())
+  id             String      @id @default(uuid())
+  clientId       String
+  firebaseApp    FirebaseApp @default(PLATAFORMA_DIGITAL)
+  firebaseUid    String      @db.VarChar(128)
+  passwordHash   String?     @db.VarChar(255)
+  isTempPassword Boolean     @default(false)
+  createdAt      DateTime    @default(now())
 
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
@@ -1774,7 +1766,7 @@ enum PaymentMethod {
 model Order {
   id String @id @default(uuid())
 
-  // Parent relations
+  // Relaciones padre
   clientId          String?
   client            Client?            @relation(fields: [clientId], references: [id])
   advisorId         String?
@@ -1797,7 +1789,7 @@ model Order {
   status           OrderStatus   @default(AWAITING_PAYMENT)
   paymentMethod    PaymentMethod @default(CASH)
 
-  // Amounts
+  // Montos
   subtotal       Decimal  @db.Decimal(12, 2)
   discount       Decimal  @default(0) @db.Decimal(12, 2)
   taxIVA         Decimal  @default(0) @db.Decimal(12, 2)
@@ -1805,18 +1797,18 @@ model Order {
   moneyExchanged Decimal? @default(0) @db.Decimal(12, 2)
   cashReceived   Decimal? @db.Decimal(12, 2)
 
-  // Provider references
+  // Referencias del proveedor
   provider          String? // 'stripe' | 'mpago' | 'conekta' | ...
   providerIntentId  String?
   providerPaymentId String?
 
-  // Contact details
+  // Datos de contacto
   guestName  String?
-  invoiceRfc String? // RFC for invoicing the sale (RFC_CLIENTE in the agencies report)
+  invoiceRfc String? // RFC para facturación de la venta (RFC_CLIENTE en reporte de agencias)
   email      String?
   phone      String?
 
-  // MIT data
+  // Datos MIT
   mitTransactionDate     DateTime?
   mitTransactionNumber   String?
   mitAuthorizationNumber String?
@@ -1824,26 +1816,26 @@ model Order {
   courtesyAuthorizerAdminId String?
   courtesyAuthorizerAdmin   Admin?  @relation("CourtesyAuthorizerAdmin", fields: [courtesyAuthorizerAdminId], references: [id])
 
-  // Refund tracking (only apply when type=REFUND with paymentMethod=MIT)
+  // Refund tracking (solo aplican cuando type=REFUND con paymentMethod=MIT)
   mitRefundId         String?
   refundedAt          DateTime?
   refundFailureReason String?
 
-  // Snapshot of penalties computed in prepareRefund (CANCEL MIT) and used in confirmRefund
+  // Snapshot de penalties calculadas en prepareRefund (CANCEL MIT) usadas en confirmRefund
   penaltiesSnapshot Json?
 
-  // Payment with loyalty points (Biger)
-  loyaltyPointsUsed    Int? // points deducted from the client's wallet
-  bigerCorrelationId   String? @unique // correlation ID sent to Biger to link the redemption
-  bigerAuthorizationId String? // authorization folio returned by Biger when confirming the discount
+  // Pago con puntos de lealtad (Biger)
+  loyaltyPointsUsed    Int? // puntos descontados del wallet del cliente
+  bigerCorrelationId   String? @unique // ID de correlación enviado a Biger para vincular la redención
+  bigerAuthorizationId String? // folio de autorización devuelto por Biger al confirmar el descuento
 
-  // Key dates
+  // Fechas clave
   expiresAt DateTime?
-  issuedAt  DateTime? // when the ticket was “issued” (optional)
+  issuedAt  DateTime? // cuándo se “emitió” el boleto (opcional)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  // Quick flags
+  // Indicadores rapidos
   hasPromotion   Boolean @default(false)
   hasAdvanceSale Boolean @default(false)
   hasCoupon      Boolean @default(false)
@@ -1855,7 +1847,7 @@ model Order {
   ticketMovementsRefund    OrderItemStatusHistory[]  @relation("TicketMovementRefund")
   ticketMovementsPenalty   OrderItemStatusHistory[]  @relation("TicketMovementPenalty")
   appliedPromotion         OrderPromotion?
-  appliedAdvanceSale       OrderAdvanceSale?
+  appliedAdvanceSale       OrderAdvanceSale[]
   appliedCoupon            OrderCoupon?
   SyncOfflineRequestOrder  SyncOfflineRequestOrder[]
   pendingTicketMovement    PendingTicketMovement?
@@ -1865,6 +1857,8 @@ model Order {
   @@index([cashRegisterId])
   @@index([shiftId])
   @@index([expiresAt])
+  // Feed de respaldo a Facturación (GET /bcb/invoice-feed/orders): rango por issuedAt con orden (issuedAt, id).
+  @@index([issuedAt, id])
 }
 
 model PendingTicketMovement {
@@ -1944,7 +1938,7 @@ model OrderPromotion {
 
 model OrderAdvanceSale {
   id                String          @id @default(uuid())
-  orderId           String          @unique
+  orderId           String
   order             Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   advanceSaleId     String
   advanceSale       AdvanceSale     @relation(fields: [advanceSaleId], references: [id])
@@ -1960,6 +1954,7 @@ model OrderAdvanceSale {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([orderId, advanceSaleRuleId])
   @@index([advanceSaleId])
   @@index([advanceSaleRuleId])
 }
@@ -2007,11 +2002,30 @@ model OrderItemStatusHistory {
   changedByClientId       String?
   changedByClient         Client?        @relation("StatusHistoryChangedByClient", fields: [changedByClientId], references: [id])
 
-  // Fields for tracking the new folio on changes/exchanges
+  // Campos para tracking de nuevo folio en cambios/canjes
   oldTicketNumber String?
   oldOrderItemId  String?
   newTicketNumber String?
   newOrderItemId  String?
+
+  // Snapshot de DESTINO: el estado en que quedó el boleto después del evento
+  // (`buildMovementTargetSnapshot`). Complementa a las columnas `old*`, que
+  // describen el estado del que se partió. Queda NULL cuando el evento no deja
+  // boleto vivo (cancelación) o cuando la corrida no se conoce (sync offline
+  // sin asiento). Sin esto, el boleto superado pierde corrida, asiento y tipo
+  // de pasajero: al moverlo se le limpia el `tripSeatId` y su `Passenger` pasa
+  // al folio nuevo.
+  //
+  // `newTripId` va SIN relación a propósito, igual que `oldTripId`: la
+  // sincronización offline (`sync.service.ts`) escribe historial tolerando
+  // corridas inexistentes, y una FK rompería esa ruta. `newPassengerTypeId` sí
+  // la lleva —el valor siempre viene de una FK existente y así el corte obtiene
+  // el `key` sin otra consulta— pero con `Restrict`: un `SET NULL` reescribiría
+  // filas de bitácora ya cerradas al depurar el catálogo.
+  newTripId          String?
+  newSeatNumber      Int?
+  newPassengerTypeId String?
+  newPassengerType   PassengerType? @relation(fields: [newPassengerTypeId], references: [id], onDelete: Restrict)
 
   createdAt      DateTime           @default(now())
   advisorUser    AdvisorUser?       @relation(fields: [advisorUserId], references: [id])
@@ -2049,11 +2063,13 @@ model OrderItem {
   ineId                        String?
   invoiceCode                  String?
   referenceId                  String?
+  advanceSaleId                String?
+  advanceSaleRuleId            String?
 
   canceledAt     DateTime?
   canceledReason String?
   isRoundOpen    Boolean   @default(false)
-  isOutbound     Boolean? // true = outbound, false = return, null = one-way/open
+  isOutbound     Boolean? // true = Ida, false = Regreso, null = Sencillos/Abiertos
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2070,20 +2086,19 @@ model OrderItem {
   passenger           Passenger?
   statusHistory       OrderStatusHistory[]     @relation("OrderItemHistory")
   movementHistory     OrderItemStatusHistory[]
-  loyaltyTransactions LoyaltyTransaction[]
   agencyCharge        AgencyCharge?
   offlineRecord       OrderItemOffline?
 
-  @@unique([tripSeatId, segmentId]) // Prevents duplicates: same seat + same segment
+  @@unique([tripSeatId, segmentId]) // Evita duplicados: mismo asiento + mismo segmento
   @@index([orderId])
   @@index([referenceId])
-  @@index([ticketTraceId]) // Full-chain lookup in O(1)
+  @@index([ticketTraceId]) // Búsqueda de cadena completa en O(1)
 }
 
-/// Folio counter per station+minute+channel. A single statement
-/// (INSERT .. ON CONFLICT DO UPDATE .. RETURNING) reserves the whole batch with no
-/// application-level locks; see `@shared/utils/ticket-number.util`.
-/// `prefix` = SSSS + TTTTTTTT + C (13 characters).
+/// Contador de folios por estación+minuto+canal. Una sola sentencia
+/// (INSERT .. ON CONFLICT DO UPDATE .. RETURNING) reserva el lote completo sin
+/// candados de aplicación; ver `@shared/utils/ticket-number.util`.
+/// `prefix` = SSSS + TTTTTTTT + C (13 caracteres).
 model FolioCounter {
   prefix     String @id
   lastSuffix Int
@@ -2245,9 +2260,9 @@ model TripDispatch {
 }
 
 enum ShiftType {
-  MORNING // Morning
-  EVENING // Evening
-  MIXED // Mixed
+  MORNING // Matutina
+  EVENING // Vespertina
+  MIXED // Combinado
 }
 
 model Bus {
@@ -2324,7 +2339,7 @@ enum BusStatus {
   DEACTIVATED
   MAINTENANCE
   OUT_OF_SERVICE
-  WRECKED //Wrecked
+  WRECKED //Siniestrada
   ASSIGNED_TO_TRIP
   ON_TRIP
 }
@@ -2397,11 +2412,13 @@ model AdvanceSaleReservation {
   quantity      Int
   expiresAt     DateTime
   createdAt     DateTime @default(now())
+  groupId       String?
 
   advanceSale AdvanceSale     @relation(fields: [advanceSaleId], references: [id], onDelete: Cascade)
   rule        AdvanceSaleRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
 
   @@index([ruleId, tripId, expiresAt])
+  @@index([groupId])
 }
 
 model TripAdvanceSaleUsage {
@@ -2447,11 +2464,11 @@ model CouponCampaign {
   beforeInactiveStatus PromotionStatus?
   discountType         DiscountType
   discountValue        Int
-  ticketsPaid          Int? // only for discountType = VOLUME
-  ticketLimit          Int? // only for discountType = TICKET_LIMIT
+  ticketsPaid          Int? // solo para discountType = VOLUME
+  ticketLimit          Int? // solo para discountType = TICKET_LIMIT
 
   discountAppliesTo      DiscountAppliesTo @default(ORDER_TOTAL)
-  discountTicketQuantity Int? // only for discountAppliesTo = TICKET_QUANTITY
+  discountTicketQuantity Int? // solo para discountAppliesTo = TICKET_QUANTITY
 
   campaignType   CampaignType @default(SINGLE_CODE)
   maxUsesPerCode Int          @default(1)
@@ -2528,7 +2545,7 @@ model OrderCoupon {
   campaignId   String
   campaign     CouponCampaign @relation(fields: [campaignId], references: [id])
 
-  // Data frozen at purchase time
+  // Datos congelados al momento de la compra
   campaignName    String
   couponCodeValue String
   discountType    DiscountType
@@ -2679,17 +2696,21 @@ model TicketPromotion {
 }
 
 model BoardingSale {
-  id         String @id @default(uuid())
-  smartmacId Int    @unique // idempotency: id sent by SmartMac
+  id String @id @default(uuid())
+
+  // BigInt y no Int: TI-FT-45 tipa los identificadores de SmartMac como Long y
+  // sus valores reales desbordan un entero de 32 bits (el id_tarjeta_viaje de
+  // ejemplo del documento, 180001576687, es ~84 veces el máximo de Int).
+  smartmacId BigInt @unique // idempotency: id sent by SmartMac
 
   travelCardId String?
   travelCard   TravelCard? @relation(fields: [travelCardId], references: [id])
 
-  externalTripId       Int
+  externalTripId       BigInt
   tripKey              String
   operatorKey          String
-  externalRouteId      Int
-  externalTravelCardId Int
+  externalRouteId      Int // número de ruta (valores de catálogo, caben en Int)
+  externalTravelCardId BigInt
   cardFolio            String?
 
   totalAmount      Decimal  @db.Decimal(12, 2)
@@ -2715,8 +2736,14 @@ model BoardingSaleItem {
   boardingSaleId String
   boardingSale   BoardingSale @relation(fields: [boardingSaleId], references: [id], onDelete: Cascade)
 
-  externalTicketId Int
-  ticketFolio      Int         @unique // unique folio per business rule
+  externalTicketId BigInt
+  // Sin @unique a nivel de base de datos: las recargas NO son boletos y
+  // comparten folio entre sí — el "Ejemplo de Json producción" de TI-FT-45
+  // rev.3 trae tres renglones RECARGA con el folio 293765222. La regla "el
+  // folio impreso debe ser único" se aplica en SmartmacService solo sobre los
+  // renglones que no son recarga; aquí queda un índice normal para que esa
+  // verificación se resuelva por índice.
+  ticketFolio      BigInt
   billingCode      String?
   soldAt           DateTime
   ticketAmount     Decimal     @db.Decimal(10, 2)
@@ -2728,6 +2755,10 @@ model BoardingSaleItem {
   segmentId        Int // external segment ID from SmartMac (tramoId)
 
   @@index([boardingSaleId])
+  // Único solo entre boletos: las recargas comparten folio y quedan fuera.
+  // Es el respaldo en BD de validateTicketFolios, que por sí solo no impide que
+  // dos ventas concurrentes con el mismo folio se registren a la vez.
+  @@unique([ticketFolio], map: "BoardingSaleItem_ticketFolio_boleto_key", where: { paymentType: { not: "RELOAD" } })
 }
 
 model FrequentCustomer {
@@ -2741,10 +2772,10 @@ model FrequentCustomer {
 }
 
 enum MiscellaneousSaleStatus {
-  PENDING // Sale created, awaiting payment confirmation
-  PROCESSING // TiempoAire recharge started, awaiting the provider's response
-  PAID // Payment confirmed
-  CANCELLED // Cancelled (payment failed or was never confirmed)
+  PENDING // Venta creada, esperando confirmación de pago
+  PROCESSING // Recarga TiempoAire iniciada, esperando respuesta del proveedor
+  PAID // Pago confirmado
+  CANCELLED // Cancelada (pago falló o no se confirmó)
 }
 
 model MiscellaneousSale {
@@ -2905,203 +2936,6 @@ model MiscellaneousSalesRecord {
   updatedBy   AdvisorUser? @relation("MiscellaneousSalesRecordUpdatedBy", fields: [updatedById], references: [id])
 }
 
-model LoyaltyWallet {
-  id                       String        @id @default(uuid())
-  isActive                 Boolean       @default(true)
-  activationDate           DateTime      @default(now())
-  cashRegisterActivationId String?
-  cashRegisterActivation   CashRegister? @relation(fields: [cashRegisterActivationId], references: [id])
-  webPlataformActivationId Boolean       @default(false)
-  shortWalletId            String        @unique
-  clientId                 String        @unique
-  client                   Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  currentBalance           Int           @default(0)
-  totalPointsEarned        Int           @default(0)
-  totalPointsUsed          Int           @default(0)
-
-  updatedAt DateTime @updatedAt
-  createdAt DateTime @default(now())
-
-  // Relations
-  buckets      LoyaltyPointBucket[]
-  transactions LoyaltyTransaction[]
-
-  deletedAt   DateTime?
-  createdById String?
-  createdBy   Admin?    @relation("LoyaltyWalletCreatedBy", fields: [createdById], references: [id])
-  updatedById String?
-  updatedBy   Admin?    @relation("LoyaltyWalletUpdatedBy", fields: [updatedById], references: [id])
-}
-
-model LoyaltyPointBucket {
-  id String @id @default(uuid())
-
-  walletId String
-  wallet   LoyaltyWallet @relation(fields: [walletId], references: [id])
-
-  // Transaction that created this bucket (Origin)
-  originTransactionId String             @unique
-  originTransaction   LoyaltyTransaction @relation("BucketOrigin", fields: [originTransactionId], references: [id])
-
-  initialAmount   Int // e.g. 100
-  remainingAmount Int // e.g. 50 (shrinks as the points are used)
-
-  expirationDate DateTime
-  status         LoyaltyBucketStatus @default(ACTIVE)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relation to the usages (Traceability)
-  usages LoyaltyBucketUsage[]
-
-  deletedAt   DateTime?
-  createdById String?
-  createdBy   Admin?    @relation("LoyaltyPointBucketCreatedBy", fields: [createdById], references: [id])
-  updatedById String?
-  updatedBy   Admin?    @relation("LoyaltyPointBucketUpdatedBy", fields: [updatedById], references: [id])
-}
-
-enum LoyaltyBucketStatus {
-  ACTIVE
-  DEPLETED // The points in this batch ran out
-  EXPIRED // The time ran out
-}
-
-model LoyaltyTransaction {
-  id String @id @default(uuid())
-
-  walletId String
-  wallet   LoyaltyWallet @relation(fields: [walletId], references: [id])
-
-  type   LoyaltyTransactionType
-  amount Int // +100 (earned) or -150 (spent)
-
-  orderItemId String?
-  orderItem   OrderItem? @relation(fields: [orderItemId], references: [id])
-  description String?
-
-  // Adjustment traceability: links this transaction to the original transaction being adjusted
-  relatedTransactionId String?
-  relatedTransaction   LoyaltyTransaction?  @relation("TransactionAdjustment", fields: [relatedTransactionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  adjustments          LoyaltyTransaction[] @relation("TransactionAdjustment")
-
-  // Extra metadata for auditing (e.g. { previousPrice: 100, newPrice: 150, reason: "schedule_change" })
-  metadata Json?
-
-  createdAt DateTime @default(now())
-
-  // If it was earned, it generated this bucket:
-  generatedBucket LoyaltyPointBucket? @relation("BucketOrigin")
-
-  // If it was spent, it consumed from these buckets:
-  bucketUsages LoyaltyBucketUsage[]
-
-  deletedAt   DateTime?
-  createdById String?
-  createdBy   Admin?    @relation("LoyaltyTransactionCreatedBy", fields: [createdById], references: [id])
-  updatedById String?
-  updatedBy   Admin?    @relation("LoyaltyTransactionUpdatedBy", fields: [updatedById], references: [id])
-
-  @@index([orderItemId])
-  @@index([relatedTransactionId])
-}
-
-model LoyaltyBucketUsage {
-  id String @id @default(uuid())
-
-  transactionId String
-  transaction   LoyaltyTransaction @relation(fields: [transactionId], references: [id])
-
-  bucketId String
-  bucket   LoyaltyPointBucket @relation(fields: [bucketId], references: [id])
-
-  amountUsed Int // How many points were taken from THIS specific bucket
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  deletedAt   DateTime?
-  createdById String?
-  createdBy   Admin?    @relation("LoyaltyBucketUsageCreatedBy", fields: [createdById], references: [id])
-  updatedById String?
-  updatedBy   Admin?    @relation("LoyaltyBucketUsageUpdatedBy", fields: [updatedById], references: [id])
-}
-
-enum LoyaltyTransactionType {
-  EARNED // Normal purchase or promo
-  REDEEMED // Points used
-  EXPIRED // Expiry
-  ADJUSTMENT // Manual correction
-  REFUND_EARNED // The purchase that gave points was cancelled (subtract)
-  REFUND_REDEEMED // The purchase paid with points was cancelled (give back)
-}
-
-enum LoyaltyServiceType {
-  ESTRELLA_ROJA
-  E_BUS
-}
-
-model LoyaltyDetailsByService {
-  id             String             @id @default(uuid())
-  service        LoyaltyServiceType
-  configurations String             @db.Text
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  deletedAt   DateTime?
-  createdById String?
-  createdBy   Admin?    @relation("LoyaltyDetailsByServiceCreatedBy", fields: [createdById], references: [id])
-  updatedById String?
-  updatedBy   Admin?    @relation("LoyaltyDetailsByServiceUpdatedBy", fields: [updatedById], references: [id])
-}
-
-model LoyalityLegalByService {
-  id                 String             @id @default(uuid())
-  service            LoyaltyServiceType
-  termsandconditions String             @db.Text
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  deletedAt   DateTime?
-  createdById String?
-  createdBy   Admin?    @relation("LoyalityLegalByServiceCreatedBy", fields: [createdById], references: [id])
-  updatedById String?
-  updatedBy   Admin?    @relation("LoyalityLegalByServiceUpdatedBy", fields: [updatedById], references: [id])
-}
-
-model LoyalityBanner {
-  id                        String                  @id @default(uuid())
-  imageUrl                  String
-  loyalityBannerByServiceId String
-  loyalityBannerByService   LoyalityBannerByService @relation(fields: [loyalityBannerByServiceId], references: [id])
-  createdAt                 DateTime                @default(now())
-  updatedAt                 DateTime                @updatedAt
-
-  deletedAt   DateTime?
-  createdById String?
-  createdBy   Admin?    @relation("LoyalityBannerCreatedBy", fields: [createdById], references: [id])
-  updatedById String?
-  updatedBy   Admin?    @relation("LoyalityBannerUpdatedBy", fields: [updatedById], references: [id])
-}
-
-model LoyalityBannerByService {
-  id             String             @id @default(uuid())
-  service        LoyaltyServiceType
-  loyalityBanner LoyalityBanner[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  deletedAt   DateTime?
-  createdById String?
-  createdBy   Admin?    @relation("LoyalityBannerByServiceCreatedBy", fields: [createdById], references: [id])
-  updatedById String?
-  updatedBy   Admin?    @relation("LoyalityBannerByServiceUpdatedBy", fields: [updatedById], references: [id])
-}
-
 enum FikFocSchemeType {
   FIK
   FOC
@@ -3190,7 +3024,7 @@ model FikFocSchemeRoute {
   @@index([deletedAt])
 }
 
-// ─── Agency Portal ────────────────────────────────────────────────────────────
+// ─── Portal de Agencias ───────────────────────────────────────────────────────
 
 enum AgencyStatus {
   ACTIVE
@@ -3339,6 +3173,7 @@ model AuditLog {
   entityId   String
   action     String
   snapshot   Json?
+  after      Json?
   createdAt  DateTime @default(now())
 
   performedById String?
@@ -3367,7 +3202,7 @@ model TravelCardTomTomSync {
 
   operation    TomTomSyncOperation
   status       TomTomSyncStatus
-  tomTomTripId Int? // nViaje generated (only on a successful CREATE)
+  tomTomTripId Int? // nViaje generado (solo en CREATE exitoso)
   errorMessage String?
 
   attemptedAt DateTime @default(now())
@@ -3416,7 +3251,7 @@ enum TomTomSyncStatus {
   FAILED
 }
 
-//Ticket collector offline collection
+//Recollecion tecket collector offline
 
 enum SyncOfflineRequestStatus {
   PROCESSING
@@ -3474,7 +3309,7 @@ model SyncOfflineRequestOrder {
   @@index([orderId])
 }
 
-//Invoicing folios
+//Folios de facturación
 
 model InvoiceCode {
   code            String        @id
@@ -3488,7 +3323,7 @@ model InvoiceCode {
   @@index([isUsed])
 }
 
-//--- mobile recharges ------------------------------
+//--- recargas telefonicas --------------------------
 model MobileOperator {
   id          String      @id @default(uuid())
   name        String      @db.VarChar(50)
@@ -3540,7 +3375,7 @@ model Mobilerecharge {
   updatedBy   AdvisorUser? @relation("MobilerechargeUpdatedBy", fields: [updatedById], references: [id])
 }
 
-// ─── Payroll Portal ───────────────────────────────────────────────────────────
+// ─── Portal de Nómina ─────────────────────────────────────────────────────────
 
 enum PayrollBonusStatus {
   PENDING
@@ -3693,4 +3528,91 @@ model BusinessRule {
   createdById String?
 
   @@index([actionType, kind, enabled, priority])
+}
+
+// ── Price Adjustments (Tarifas) ────────────────────────
+
+model PriceAdjustment {
+  id          String                @id @default(uuid())
+  name        String                @db.VarChar(50)
+  type        PriceAdjustmentType
+  mode        PriceAdjustmentMode
+  status      PriceAdjustmentStatus @default(CREATED)
+  scheduledAt DateTime
+  appliedAt   DateTime?
+  deletedAt   DateTime?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id])
+
+  createdById String
+  createdBy   Admin   @relation("PriceAdjustmentCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   Admin?  @relation("PriceAdjustmentUpdatedBy", fields: [updatedById], references: [id])
+
+  routes PriceAdjustmentRoute[]
+
+  @@unique([name], where: { deletedAt: null })
+  @@index([status, scheduledAt])
+  @@index([deletedAt])
+}
+
+enum PriceAdjustmentType {
+  INCREMENT
+  DECREMENT
+}
+
+enum PriceAdjustmentMode {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum PriceAdjustmentStatus {
+  CREATED
+  APPLIED
+}
+
+model PriceAdjustmentRoute {
+  id              String  @id @default(uuid())
+  applyToSegments Boolean @default(false) // "A tramos" checkbox, so edit can restore it
+
+  valueOneWay Decimal? @db.Decimal(10, 2)
+  valueRound  Decimal? @db.Decimal(10, 2)
+
+  // Snapshot taken on save
+  priceOneWayBefore Decimal  @db.Decimal(10, 2)
+  priceOneWayAfter  Decimal  @db.Decimal(10, 2)
+  priceRoundBefore  Decimal? @db.Decimal(10, 2)
+  priceRoundAfter   Decimal? @db.Decimal(10, 2)
+
+  priceAdjustmentId String
+  priceAdjustment   PriceAdjustment @relation(fields: [priceAdjustmentId], references: [id], onDelete: Cascade)
+  routeId           String
+  route             Route           @relation(fields: [routeId], references: [id])
+
+  segments PriceAdjustmentSegment[]
+
+  @@unique([priceAdjustmentId, routeId])
+  @@index([routeId])
+}
+
+model PriceAdjustmentSegment {
+  id String @id @default(uuid())
+
+  valueOneWay Decimal? @db.Decimal(10, 2)
+  valueRound  Decimal? @db.Decimal(10, 2)
+
+  priceOneWayBefore Decimal  @db.Decimal(10, 2)
+  priceOneWayAfter  Decimal  @db.Decimal(10, 2)
+  priceRoundBefore  Decimal? @db.Decimal(10, 2)
+  priceRoundAfter   Decimal? @db.Decimal(10, 2)
+
+  priceAdjustmentRouteId String
+  priceAdjustmentRoute   PriceAdjustmentRoute @relation(fields: [priceAdjustmentRouteId], references: [id], onDelete: Cascade)
+  segmentId              String
+  segment                Segment              @relation(fields: [segmentId], references: [id])
+
+  @@unique([priceAdjustmentRouteId, segmentId])
 }
