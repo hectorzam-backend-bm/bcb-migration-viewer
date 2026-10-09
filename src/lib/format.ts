@@ -48,9 +48,9 @@ const DATE_TIME = new Intl.DateTimeFormat('es-MX', {
  *
  * `dayLabel`/`dayLabelFull`/`monthLabel` below do NOT need this shift — they
  * format an already-resolved `YYYY-MM-DD` calendar-day string (built by
- * `~/server/trips`'s `toIsoDate`, itself corrected), never a raw stored
- * instant, so there is nothing left to shift. Only `time`/`legacyDateTime`
- * take a raw instant. `createdAt`/`updatedAt` on every OTHER model are real,
+ * `~/server/trips`'s `toIsoDate` or by `legacyDay` below, both corrected),
+ * never a raw stored instant, so there is nothing left to shift. Only
+ * `time`/`legacyDateTime`/`legacyDay` take a raw instant. `createdAt`/`updatedAt` on every OTHER model are real,
  * unshifted instants and keep using plain `dateTime`.
  */
 export const LEGACY_OFFSET_HOURS = 6
@@ -151,6 +151,14 @@ export function legacyDateTime(value: string | Date | null | undefined): string 
   if (!value) return NO_DATA
   const d = typeof value === 'string' ? new Date(value) : value
   return Number.isNaN(d.getTime()) ? NO_DATA : LEGACY_DATE_TIME.format(toLegacyLocal(d))
+}
+
+/** Local `YYYY-MM-DD` calendar day of a legacy-shifted instant — the input
+ *  `dayLabel`/`dayLabelFull` expect. Never `.slice(0, 10)` the raw ISO string:
+ *  that is the UTC day, one day late for anything from 18:00 local onward. */
+export function legacyDay(value: string | Date): string {
+  const d = typeof value === 'string' ? new Date(value) : value
+  return toLegacyLocal(d).toISOString().slice(0, 10)
 }
 
 /** Day-strip chip label for a plain `YYYY-MM-DD` calendar date, e.g. "18 ago". */

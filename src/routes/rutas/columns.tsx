@@ -142,7 +142,7 @@ export const routeColumns = routeHelper.columns([
 const segmentHelper = createColumnHelper<typeof features, SegmentRow>()
 
 export const segmentColumns = segmentHelper.columns([
-  segmentHelper.accessor('number', {
+  segmentHelper.accessor('order', {
     header: 'No.',
     meta: { skeletonWidth: 7 },
     cell: ({ getValue }) => <KeyText emphasis>{getValue()}</KeyText>,

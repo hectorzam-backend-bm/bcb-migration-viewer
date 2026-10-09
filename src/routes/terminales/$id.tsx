@@ -285,7 +285,7 @@ const segmentHelper = createColumnHelper<typeof features, StationSegment>()
  *  origin/destination pair can put the current station in full ink. */
 function makeSegmentColumns(currentId: string) {
   return segmentHelper.columns([
-    segmentHelper.accessor('number', {
+    segmentHelper.accessor('order', {
       header: 'No. tramo',
       cell: ({ row, getValue }) => (
         <span className="flex items-center gap-2">

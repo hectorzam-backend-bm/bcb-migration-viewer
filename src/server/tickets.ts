@@ -447,6 +447,7 @@ export type TicketMovement = {
   movementType: string
   createdAt: string
   oldStatus: string | null
+  oldTripId: string | null
   oldSeatNumber: number | null
   oldTotalPrice: string | null
   oldOriginShortName: string | null
@@ -569,6 +570,7 @@ export const getTicket = createServerFn({ method: 'GET' })
               movementType: true,
               createdAt: true,
               oldStatus: true,
+              oldTripId: true,
               oldSeatNumber: true,
               oldTotalPrice: true,
               oldOriginShortName: true,
@@ -587,8 +589,11 @@ export const getTicket = createServerFn({ method: 'GET' })
           failure: {
             title: 'El boleto no existe',
             detail: `No hay ningún boleto con el folio ${data.folio}.`,
+            // Mirrors the skip reasons of the backend's `importBoletos`
+            // (TRIP_NOT_FOUND, FOLIO_MISSING_SALE_ROW, OPEN_LEG_WITHOUT_OUTBOUND,
+            // REFERENCED_OPERATION_EXCLUDED, STATION/SEGMENT_NOT_FOUND).
             suggestion:
-              'Es posible que la fila se haya descartado durante la importación (FO/FT, sin corrida resoluble, o sin tramo) o que el folio esté mal copiado.',
+              'Es posible que el importador lo haya descartado: su corrida no viene en CORRIDAS_TARJETAS; el folio no tiene fila de venta (VT/VA) propia —todo cambio de horario (HO) y canje (AC) cae aquí, igual que una cancelación sin venta—; es un abierto (VA) sin tramo de ida en su transacción; es FO/FT; o su terminal o tramo no se resolvió. También puede que el folio esté mal copiado.',
           },
         }
       }
@@ -640,6 +645,7 @@ export const getTicket = createServerFn({ method: 'GET' })
           movementType: m.movementType,
           createdAt: m.createdAt.toISOString(),
           oldStatus: m.oldStatus,
+          oldTripId: m.oldTripId,
           oldSeatNumber: m.oldSeatNumber,
           oldTotalPrice: m.oldTotalPrice ? m.oldTotalPrice.toString() : null,
           oldOriginShortName: m.oldOriginShortName,

@@ -396,7 +396,7 @@ export const listTrips = createServerFn({ method: 'GET' })
 
 export type TripSegmentDetail = {
   id: string
-  number: string
+  order: number
   isMain: boolean
   origin: StationRef
   destination: StationRef
@@ -496,7 +496,7 @@ export const getTrip = createServerFn({ method: 'GET' })
               priceRound: true,
               segment: {
                 select: {
-                  number: true,
+                  order: true,
                   isMain: true,
                   originStation: { select: STATION_SELECT },
                   destinationStation: { select: STATION_SELECT },
@@ -570,7 +570,7 @@ export const getTrip = createServerFn({ method: 'GET' })
         updatedAt: t.updatedAt.toISOString(),
         segments: t.segments.map((s) => ({
           id: s.id,
-          number: s.segment.number,
+          order: s.segment.order,
           isMain: s.segment.isMain,
           origin: station(s.segment.originStation),
           destination: station(s.segment.destinationStation),

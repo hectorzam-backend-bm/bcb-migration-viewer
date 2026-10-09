@@ -9,8 +9,14 @@
  * `validateSearch` stays exactly typed, with no extra dependencies.
  */
 
+/** The router JSON-parses each param, so a hand-typed or pasted `?q=409` (a
+ *  folio, a route number) arrives as the number 409, not the string. Read it
+ *  back as the text that was typed; dropping it to the fallback is not enough,
+ *  because the router keeps the raw value for any key the validator omits. */
 export function text(value: unknown, fallback = ''): string {
-  return typeof value === 'string' ? value : fallback
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return fallback
 }
 
 export function integerParam(

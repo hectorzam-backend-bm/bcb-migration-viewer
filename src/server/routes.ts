@@ -61,7 +61,7 @@ export type RouteRow = {
 
 export type SegmentRow = {
   id: string
-  number: string
+  order: number
   route: { id: string; number: string; name: string }
   origin: StationRef
   destination: StationRef
@@ -99,7 +99,7 @@ export type RoutesResponse =
 
 /* ── Utilities ──────────────────────────────────────────────────────────── */
 
-/** Route and segment numbers are text in the database: sort them as numbers. */
+/** Route numbers are text in the database: sort them as numbers. */
 function byNumber(a: string, b: string) {
   return a.localeCompare(b, 'es', { numeric: true, sensitivity: 'base' })
 }
@@ -132,7 +132,7 @@ type SegmentSort = (dir: Prisma.SortOrder) => Array<Prisma.SegmentOrderByWithRel
 const ROUTES_BY_NUMBER: RouteSort = (dir) => [{ number: dir }]
 const SEGMENTS_BY_ROUTE: SegmentSort = (dir) => [
   { route: { number: dir } },
-  { number: 'asc' },
+  { order: 'asc' },
 ]
 
 const ROUTE_SORTS: Record<string, RouteSort> = {
@@ -148,7 +148,7 @@ const ROUTE_SORTS: Record<string, RouteSort> = {
 }
 
 const SEGMENT_SORTS: Record<string, SegmentSort> = {
-  number: (dir) => [{ number: dir }],
+  order: (dir) => [{ order: dir }, { route: { number: 'asc' } }],
   route: SEGMENTS_BY_ROUTE,
   origin: (dir) => [{ originStation: { shortName: dir } }],
   destination: (dir) => [{ destinationStation: { shortName: dir } }],
@@ -243,7 +243,7 @@ export const listRoutes = createServerFn({ method: 'GET' })
           ...(query
             ? {
                 OR: [
-                  { number: { contains: query, mode: 'insensitive' } },
+                  ...(/^\d+$/.test(query) ? [{ order: Number(query) }] : []),
                   {
                     originStation: {
                       OR: [
@@ -292,7 +292,7 @@ export const listRoutes = createServerFn({ method: 'GET' })
             take: perPage,
             select: {
               id: true,
-              number: true,
+              order: true,
               stayTimeMinutes: true,
               durationMinutes: true,
               distanceKm: true,
@@ -312,7 +312,7 @@ export const listRoutes = createServerFn({ method: 'GET' })
 
         const rows: Array<SegmentRow> = records.map((t) => ({
           id: t.id,
-          number: t.number,
+          order: t.order,
           route: { id: t.route.id, number: t.route.number, name: t.route.name },
           origin: station(t.originStation),
           destination: station(t.destinationStation),
@@ -410,7 +410,7 @@ export const listRoutes = createServerFn({ method: 'GET' })
 
 export type SegmentDetail = {
   id: string
-  number: string
+  order: number
   origin: StationRef
   destination: StationRef
   stayTimeMinutes: number
@@ -520,7 +520,7 @@ export const getRoute = createServerFn({ method: 'GET' })
             where: { deletedAt: null },
             select: {
               id: true,
-              number: true,
+              order: true,
               stayTimeMinutes: true,
               durationMinutes: true,
               distanceKm: true,
@@ -603,7 +603,7 @@ export const getRoute = createServerFn({ method: 'GET' })
         segments: r.segments
           .map((t) => ({
             id: t.id,
-            number: t.number,
+            order: t.order,
             origin: station(t.originStation),
             destination: station(t.destinationStation),
             stayTimeMinutes: t.stayTimeMinutes,
@@ -615,7 +615,7 @@ export const getRoute = createServerFn({ method: 'GET' })
             isMain: t.isMain,
             isActive: t.isActive,
           }))
-          .sort((a, b) => byNumber(a.number, b.number)),
+          .sort((a, b) => a.order - b.order),
         deletedSegments: r._count.segments,
       }
 

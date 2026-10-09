@@ -289,7 +289,7 @@ export type StationRoute = {
 
 export type StationSegment = {
   id: string
-  number: string
+  order: number
   isMain: boolean
   isActive: boolean
   isDeleted: boolean
@@ -465,7 +465,7 @@ export const getStation = createServerFn({ method: 'GET' })
           },
           select: {
             id: true,
-            number: true,
+            order: true,
             isMain: true,
             isActive: true,
             deletedAt: true,
@@ -474,7 +474,7 @@ export const getStation = createServerFn({ method: 'GET' })
             destinationStation: STATION_BRIEF,
             route: { select: { id: true, number: true, name: true } },
           },
-          orderBy: [{ route: { number: 'asc' } }, { number: 'asc' }],
+          orderBy: [{ route: { number: 'asc' } }, { order: 'asc' }],
         }),
       ])
 
@@ -540,7 +540,7 @@ export const getStation = createServerFn({ method: 'GET' })
         arrivals: arrivals.map(toStationRoute),
         segments: segments.map((t) => ({
           id: t.id,
-          number: t.number,
+          order: t.order,
           isMain: t.isMain,
           isActive: t.isActive,
           isDeleted: t.deletedAt !== null,

@@ -40,6 +40,7 @@ const SORTS = [
   'distance',
   'status',
   'route',
+  'order',
   'origin',
   'destination',
   'stayTime',

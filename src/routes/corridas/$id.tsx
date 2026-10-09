@@ -15,10 +15,10 @@ import {
   dateTime,
   dayLabelFull,
   integer,
+  legacyDay,
   minutes,
   plural,
   time,
-  toLegacyLocal,
 } from '~/lib/format'
 import type { StationRef, TripDetail, TripPassengerTypeDetail, TripSegmentDetail } from '~/server/trips'
 import { getTrip } from '~/server/trips'
@@ -71,7 +71,7 @@ function YesNo({ value }: { value: boolean }) {
 const segmentHelper = createColumnHelper<typeof features, TripSegmentDetail>()
 
 const segmentColumns = segmentHelper.columns([
-  segmentHelper.accessor('number', {
+  segmentHelper.accessor('order', {
     header: 'No.',
     cell: ({ row, getValue }) => (
       <span className="inline-flex items-center gap-1.5">
@@ -203,7 +203,7 @@ function Screen() {
   // `trip.departure` is the raw stored (shifted) instant's ISO string — its
   // own UTC calendar day is not the local one. See `~/lib/format`'s
   // `LEGACY_OFFSET_HOURS` note.
-  const day = toLegacyLocal(new Date(trip.departure)).toISOString().slice(0, 10)
+  const day = legacyDay(trip.departure)
   const durationMinutes = trip.arrival
     ? Math.round((new Date(trip.arrival).getTime() - new Date(trip.departure).getTime()) / 60000)
     : null

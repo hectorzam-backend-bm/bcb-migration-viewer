@@ -340,7 +340,7 @@ type SegmentTotals = {
  *  rebuilt (via `useMemo`, keyed on the route) rather than declared statically. */
 function makeSegmentLedgerColumns(totals: SegmentTotals) {
   return segmentLedgerHelper.columns([
-    segmentLedgerHelper.accessor('number', {
+    segmentLedgerHelper.accessor('order', {
       header: 'No.',
       footer: () => (
         <span className="font-mono text-note font-medium tracking-[0.085em] text-ink-3 uppercase">
@@ -514,12 +514,12 @@ function checkIntegrity(routeDetail: RouteDetail): Array<string> {
 
   if (main.origin.id !== routeDetail.origin.id) {
     warnings.push(
-      `El origen de la ruta es ${routeDetail.origin.key} (${routeDetail.origin.name}), pero el del tramo principal ${main.number} es ${main.origin.key} (${main.origin.name}).`,
+      `El origen de la ruta es ${routeDetail.origin.key} (${routeDetail.origin.name}), pero el del tramo principal ${main.order} es ${main.origin.key} (${main.origin.name}).`,
     )
   }
   if (main.destination.id !== routeDetail.destination.id) {
     warnings.push(
-      `El destino de la ruta es ${routeDetail.destination.key} (${routeDetail.destination.name}), pero el del tramo principal ${main.number} es ${main.destination.key} (${main.destination.name}).`,
+      `El destino de la ruta es ${routeDetail.destination.key} (${routeDetail.destination.name}), pero el del tramo principal ${main.order} es ${main.destination.key} (${main.destination.name}).`,
     )
   }
 

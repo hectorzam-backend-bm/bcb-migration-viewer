@@ -19,6 +19,7 @@ import {
   dayLabelFull,
   integer,
   legacyDateTime,
+  legacyDay,
   time,
 } from '~/lib/format'
 import type { TicketDetail, TicketMovement } from '~/server/tickets'
@@ -50,9 +51,20 @@ export const Route = createFileRoute('/boletos/$id')({
 
 /* Los campos `old*` de `OrderItemStatusHistory` son una FOTOGRAFÍA en texto del
    momento del movimiento, no llaves foráneas vigentes — por eso ninguna celda
-   de aquí enlaza a /terminales: enlazar una foto a la fila viva de hoy sería
-   afirmar que son lo mismo. */
+   de aquí enlaza a /terminales ni a /corridas: enlazar una foto a la fila viva
+   de hoy sería afirmar que son lo mismo. Los folios sí enlazan: un folio es
+   único y no cambia, y seguirlo es la única forma de recorrer una cadena de
+   cambios/canjes (folio anterior ↔ folio nuevo). */
 const movementHelper = createColumnHelper<typeof features, TicketMovement>()
+
+function FolioLink({ folio }: { folio: string | null }) {
+  if (!folio) return NO_DATA
+  return (
+    <TextLink to="/boletos/$id" params={{ id: folio }}>
+      <KeyText>{folio}</KeyText>
+    </TextLink>
+  )
+}
 
 const movementColumns = movementHelper.columns([
   movementHelper.accessor('movementType', {
@@ -90,6 +102,13 @@ const movementColumns = movementHelper.columns([
       )
     },
   }),
+  movementHelper.accessor('oldTripId', {
+    header: 'Corrida ant.',
+    cell: ({ getValue }) => {
+      const value = getValue()
+      return value ? <KeyText>{value}</KeyText> : NO_DATA
+    },
+  }),
   movementHelper.accessor('oldSeatNumber', {
     header: 'Asiento ant.',
     meta: { numeric: true },
@@ -102,17 +121,11 @@ const movementColumns = movementHelper.columns([
   }),
   movementHelper.accessor('oldTicketNumber', {
     header: 'Folio ant.',
-    cell: ({ getValue }) => {
-      const value = getValue()
-      return value ? <KeyText>{value}</KeyText> : NO_DATA
-    },
+    cell: ({ getValue }) => <FolioLink folio={getValue()} />,
   }),
   movementHelper.accessor('newTicketNumber', {
     header: 'Folio nuevo',
-    cell: ({ getValue }) => {
-      const value = getValue()
-      return value ? <KeyText>{value}</KeyText> : NO_DATA
-    },
+    cell: ({ getValue }) => <FolioLink folio={getValue()} />,
   }),
   movementHelper.accessor('reason', {
     header: 'Motivo',
@@ -287,10 +300,11 @@ function Screen() {
               )}
             </Field>
             {/* `trip.departure` es un horario de pared, no un instante — usa
-                `time`/`dayLabelFull` (corregidos, ver `LEGACY_OFFSET_HOURS`),
-                nunca `legacyDateTime`/`dateTime` para este campo. */}
+                `time`/`legacyDay` (corregidos, ver `LEGACY_OFFSET_HOURS`),
+                nunca `legacyDateTime`/`dateTime` ni `.slice(0, 10)` (día UTC,
+                un día tarde desde las 18:00) para este campo. */}
             <Field label="Salida planeada" mono>
-              {ticket.trip ? `${time(ticket.trip.departure)} · ${dayLabelFull(ticket.trip.departure.slice(0, 10))}` : NO_DATA}
+              {ticket.trip ? `${time(ticket.trip.departure)} · ${dayLabelFull(legacyDay(ticket.trip.departure))}` : NO_DATA}
             </Field>
             <Field label="Sentido">
               <YesNo value={ticket.isOutbound === null ? null : ticket.isOutbound} />
@@ -328,6 +342,12 @@ function Screen() {
             trae es una caja de relleno que el propio importador creó para poder guardar la venta, no la del sistema
             anterior. El monto de descuento llega siempre en $0.00 por la misma razón: un cero aquí no significa
             «sin descuento», significa «no se leyó».
+          </p>
+          <p className="mt-3 max-w-[80ch] text-body text-ink-3">
+            La tarifa base y el IVA tampoco son los del sistema anterior: el importador no lee SUBTOTAL ni IVA de
+            boletos.csv; guarda el total como tarifa base y calcula el IVA a partir del total, redondeado a pesos. El
+            estatus «Viajó» lo pone el importador a todo boleto vendido con corrida —no lee BOLETOS_ABORDADOS.csv—, así
+            que no prueba que el pasajero abordó, y la hora de abordaje no se migra.
           </p>
         </Block>
 
