@@ -306,6 +306,13 @@ function Screen() {
             <Field label="Salida planeada" mono>
               {ticket.trip ? `${time(ticket.trip.departure)} · ${dayLabelFull(legacyDay(ticket.trip.departure))}` : NO_DATA}
             </Field>
+            {/* El importador no tiene columna de abordaje: en un boleto TRAVELED
+                guarda el primer FECHA_HORA_ABORDAJE de BOLETOS_ABORDADOS.csv en
+                `updatedAt`, con el mismo desplazamiento de +6h que la venta —
+                por eso `legacyDateTime`, no `dateTime`. */}
+            <Field label="Hora de abordaje" mono>
+              {ticket.status === 'TRAVELED' ? legacyDateTime(ticket.updatedAt) : NO_DATA}
+            </Field>
             <Field label="Sentido">
               <YesNo value={ticket.isOutbound === null ? null : ticket.isOutbound} />
             </Field>
@@ -344,10 +351,11 @@ function Screen() {
             «sin descuento», significa «no se leyó».
           </p>
           <p className="mt-3 max-w-[80ch] text-body text-ink-3">
-            La tarifa base y el IVA tampoco son los del sistema anterior: el importador no lee SUBTOTAL ni IVA de
-            boletos.csv; guarda el total como tarifa base y calcula el IVA a partir del total, redondeado a pesos. El
-            estatus «Viajó» lo pone el importador a todo boleto vendido con corrida —no lee BOLETOS_ABORDADOS.csv—, así
-            que no prueba que el pasajero abordó, y la hora de abordaje no se migra.
+            La tarifa base es el total, no el subtotal: el importador no guarda SUBTOTAL. El IVA sí viene de
+            boletos.csv; cuando el origen no lo trae (taquillas offline, venta web), el importador lo calcula a partir
+            del total. «Viajó» y la hora de abordaje vienen de BOLETOS_ABORDADOS.csv; como el boleto no tiene columna
+            de abordaje, la hora se guarda en la fecha de actualización, y cualquier escritura posterior al boleto la
+            sobrescribe.
           </p>
         </Block>
 
@@ -372,8 +380,10 @@ function Screen() {
             <Field label="Creado" mono>
               {dateTime(ticket.createdAt)}
             </Field>
-            <Field label="Actualizado" mono>
-              {dateTime(ticket.updatedAt)}
+            {/* En un boleto TRAVELED, `updatedAt` es la hora de abordaje (ver
+                «Hora de abordaje»), no una fecha de auditoría. */}
+            <Field label={ticket.status === 'TRAVELED' ? 'Actualizado (= hora de abordaje)' : 'Actualizado'} mono>
+              {ticket.status === 'TRAVELED' ? legacyDateTime(ticket.updatedAt) : dateTime(ticket.updatedAt)}
             </Field>
           </Grid>
         </Card>

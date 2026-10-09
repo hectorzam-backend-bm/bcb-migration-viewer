@@ -34,6 +34,7 @@ export const REASON_LABELS: Record<string, string> = {
   DUPLICATE_SALE_ROW_FOR_FOLIO: 'Más de una fila de venta para el mismo folio',
   REFERENCED_OPERATION_EXCLUDED: 'La operación que referencia quedó fuera de la importación',
   ALREADY_IMPORTED: 'El boleto ya estaba importado',
+  OPEN_LEG_WITHOUT_OUTBOUND: 'Abierto sin tramo de ida en su transacción',
   // Del restore de JSON (`~/server/restore`), no del API.
   ALREADY_EXISTS_WITH_OTHER_ID: 'Ya existe una fila con esa clave, bajo otro id',
   COMPANY_NOT_FOUND: 'No se encontró la empresa',
@@ -62,6 +63,13 @@ export const COUNTER_LABELS: Record<string, string> = {
   seatNumberMissing: 'Boletos sin número de asiento',
   passengerTypeUnresolved: 'Tipos de pasajero sin resolver',
   paymentMethodCodeUnrecognized: 'Formas de pago no reconocidas',
+  orderItemsSkippedAsDuplicateInDb: 'Boletos descartados por asiento ya ocupado',
+  openLegsImported: 'Abiertos importados',
+  openLegsMarkedRedeemed: 'Abiertos marcados como canjeados',
+  priceMismatch: 'Boletos con subtotal + IVA distinto del total',
+  priceBreakdownMissing: 'Boletos sin subtotal/IVA (IVA calculado)',
+  boardingsAppliedToExisting: 'Abordajes aplicados a boletos ya importados',
+  boardedTicketNotFound: 'Abordajes de folios que no existen',
   // Del restore de JSON (`~/server/restore`), no del API.
   companiesUpdated: 'Empresas actualizadas',
   servicesUpdated: 'Servicios actualizados',
@@ -84,6 +92,10 @@ const AMBER_COUNTERS = new Set([
   'seatNumberMissing',
   'passengerTypeUnresolved',
   'paymentMethodCodeUnrecognized',
+  'orderItemsSkippedAsDuplicateInDb',
+  'priceMismatch',
+  'priceBreakdownMissing',
+  'boardedTicketNotFound',
 ])
 
 function LabeledCounts({

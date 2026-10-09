@@ -34,7 +34,7 @@ const IMPORT_STEPS = {
   segments: { path: '/seeds/import/segments', fields: ['segments', 'routes'] },
   tariffs: { path: '/seeds/import/tariffs', fields: ['tariffs'] },
   trips: { path: '/seeds/import/trips', fields: ['corridas', 'limits'] },
-  boletos: { path: '/seeds/import/boletos', fields: ['boletos'] },
+  boletos: { path: '/seeds/import/boletos', fields: ['boletos', 'abordados'] },
 } as const satisfies Record<string, { path: string; fields: ReadonlyArray<string> }>
 
 export type ImportStep = keyof typeof IMPORT_STEPS

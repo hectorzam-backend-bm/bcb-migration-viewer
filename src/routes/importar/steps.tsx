@@ -17,6 +17,7 @@ export type SlotKey =
   | 'corridas'
   | 'limits'
   | 'boletos'
+  | 'abordados'
 
 export type Slot = { key: SlotKey; label: string; legacyFile: string }
 
@@ -139,9 +140,12 @@ export const STEPS: ReadonlyArray<StepDef> = [
     kind: 'upload',
     title: 'Boletos',
     description:
-      'Sube boletos.csv. Crea las órdenes, los boletos, sus pasajeros, los asientos de cada corrida y un movimiento por boleto. Bloqueado hasta que existan corridas y tipos de pasajero — el paso de Corridas crea ambos. El importador no lee el correo, el teléfono, el asesor, la caja real, el corte ni el descuento: esos campos quedan vacíos en el visor.',
+      'Sube boletos.csv y BOLETOS_ABORDADOS.csv. Crea las órdenes, los boletos, sus pasajeros, los asientos de cada corrida y un movimiento por boleto. BOLETOS_ABORDADOS.csv decide el estatus: un folio listado ahí queda «Viajó» con su hora de abordaje; uno con corrida ya pasada que no aparece, «No viajó». También marca como abordados los boletos de entregas anteriores, así que las entregas se suben en orden. Bloqueado hasta que existan corridas y tipos de pasajero — el paso de Corridas crea ambos. El importador no lee el correo, el teléfono, el asesor, la caja real, el corte ni el descuento: esos campos quedan vacíos en el visor.',
     importStep: 'boletos',
-    slots: [{ key: 'boletos', label: 'Boletos', legacyFile: 'boletos.csv' }],
+    slots: [
+      { key: 'boletos', label: 'Boletos', legacyFile: 'boletos.csv' },
+      { key: 'abordados', label: 'Boletos abordados', legacyFile: 'BOLETOS_ABORDADOS.csv' },
+    ],
     status: (s) =>
       s.tickets > 0
         ? { done: true, note: `${plural(s.tickets, 'boleto', 'boletos')} · ${plural(s.orders, 'orden', 'órdenes')}` }
