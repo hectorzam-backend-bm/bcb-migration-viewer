@@ -193,9 +193,12 @@ function Screen() {
 
       <div className="flex flex-col gap-7 px-4 sm:px-8 py-6">
         <Sheet>
-          <div className="grid grid-cols-2 gap-x-8 gap-y-6 p-5 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-x-8 gap-y-6 p-5 sm:grid-cols-4 lg:grid-cols-7">
             <Stat label="Total" value={currency(ticket.totalPrice)} tone="stamp" />
+            {/* `basePrice` is the original total by design; the subtotal is never
+                stored — PDFs and reports derive it as total − IVA, and so does this. */}
             <Stat label="Tarifa base" value={currency(ticket.basePrice)} />
+            <Stat label="Subtotal" value={currency((Number(ticket.totalPrice) - Number(ticket.tax)).toFixed(2))} />
             <Stat label="IVA" value={currency(ticket.tax)} />
             <Stat label="Descuento" value={currency(ticket.discount)} />
             <Stat
@@ -351,11 +354,11 @@ function Screen() {
             «sin descuento», significa «no se leyó».
           </p>
           <p className="mt-3 max-w-[80ch] text-body text-ink-3">
-            La tarifa base es el total, no el subtotal: el importador no guarda SUBTOTAL. El IVA sí viene de
-            boletos.csv; cuando el origen no lo trae (taquillas offline, venta web), el importador lo calcula a partir
-            del total. «Viajó» y la hora de abordaje vienen de BOLETOS_ABORDADOS.csv; como el boleto no tiene columna
-            de abordaje, la hora se guarda en la fecha de actualización, y cualquier escritura posterior al boleto la
-            sobrescribe.
+            La tarifa base es el total original del boleto, por diseño. El subtotal no se guarda: aquí, como en los
+            PDF y reportes, se calcula al mostrarlo (total − IVA). El IVA viene de boletos.csv; cuando el origen no lo
+            trae (taquillas offline, venta web), el importador lo calcula a partir del total. «Viajó» y la hora de
+            abordaje vienen de BOLETOS_ABORDADOS.csv; como el boleto no tiene columna de abordaje, la hora se guarda
+            en la fecha de actualización, y cualquier escritura posterior al boleto la sobrescribe.
           </p>
         </Block>
 
