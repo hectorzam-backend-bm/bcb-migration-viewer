@@ -280,3 +280,55 @@ export const TRIP_TYPE_LABELS: Record<string, string> = {
   NORMAL: 'Normal',
   EXTRA: 'Extra',
 }
+
+/** `PromotionStatus` — `CouponCampaign.status`. */
+export const CAMPAIGN_STATUS_LABELS: Record<string, string> = {
+  CREATED: 'Creada',
+  ON_GOING: 'Vigente',
+  INACTIVE: 'Inactiva',
+  FINISHED: 'Finalizada',
+  EXPIRED: 'Vencida',
+  EXHAUSTED: 'Agotada',
+}
+
+/** `CouponStatus` — `CouponCode.status`. */
+export const COUPON_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: 'Disponible',
+  INACTIVE: 'Inactivo',
+  EXPIRED: 'Vencido',
+  EXHAUSTED: 'Agotado',
+}
+
+export const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
+  SINGLE_CODE: 'Código único',
+  PACKAGE: 'Paquete',
+}
+
+export const DISCOUNT_TYPE_LABELS: Record<string, string> = {
+  PERCENTAGE: '% descuento',
+  FIXED_AMOUNT: 'Monto fijo',
+  VOLUME: 'Por volumen',
+  TICKET_LIMIT: 'Límite de boletos',
+}
+
+export const DISCOUNT_APPLIES_TO_LABELS: Record<string, string> = {
+  ORDER_TOTAL: 'Sobre orden de venta',
+  TICKET_QUANTITY: 'Sobre número de boletos',
+}
+
+/** `PromotionTripType` — the "Tipo de boleto" a campaign accepts. */
+export const PROMOTION_TRIP_TYPE_LABELS: Record<string, string> = {
+  ONE_WAY: 'Sencillo',
+  ROUND_TRIP: 'Redondo',
+  ROUND_TRIP_RETURN_OPEN: 'Redondo con regreso abierto',
+}
+
+export const DAY_OF_WEEK_LABELS: Record<string, string> = {
+  MONDAY: 'Lunes',
+  TUESDAY: 'Martes',
+  WEDNESDAY: 'Miércoles',
+  THURSDAY: 'Jueves',
+  FRIDAY: 'Viernes',
+  SATURDAY: 'Sábado',
+  SUNDAY: 'Domingo',
+}

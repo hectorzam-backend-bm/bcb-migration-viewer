@@ -14,6 +14,7 @@ export type Counts = {
   segments: number
   trips: number
   tickets: number
+  coupons: number
 }
 
 const SECTIONS = [
@@ -23,6 +24,7 @@ const SECTIONS = [
   { to: '/rutas', label: 'Rutas y tramos', countKey: 'routes' },
   { to: '/corridas', label: 'Corridas', countKey: 'trips' },
   { to: '/boletos', label: 'Boletos', countKey: 'tickets' },
+  { to: '/cupones', label: 'Cupones', countKey: 'coupons' },
   // Sin countKey a propósito: no es un catálogo, es una acción — no tiene un
   // conteo de "lo vigente" que mostrar.
   { to: '/importar', label: 'Importar' },

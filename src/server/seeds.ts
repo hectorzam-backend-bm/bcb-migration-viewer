@@ -35,6 +35,7 @@ const IMPORT_STEPS = {
   tariffs: { path: '/seeds/import/tariffs', fields: ['tariffs'] },
   trips: { path: '/seeds/import/trips', fields: ['corridas', 'limits'] },
   boletos: { path: '/seeds/import/boletos', fields: ['boletos', 'abordados'] },
+  cupones: { path: '/seeds/import/cupones', fields: ['cupones'] },
 } as const satisfies Record<string, { path: string; fields: ReadonlyArray<string> }>
 
 export type ImportStep = keyof typeof IMPORT_STEPS
@@ -157,6 +158,8 @@ export type ImportStatus = {
    *  step's own status note show both nouns before the report ever runs. */
   orders: number
   tickets: number
+  /** One per order — `OrderCoupon.orderId` is unique. */
+  orderCoupons: number
 }
 
 export type StatusResponse = { ok: true; status: ImportStatus } | { ok: false; failure: Failure }
@@ -184,6 +187,7 @@ export const getImportStatus = createServerFn({ method: 'GET' }).handler(
         passengerTypes,
         orders,
         tickets,
+        orderCoupons,
       ] = await Promise.all([
         db.state.count(),
         db.company.count({ where: { deletedAt: null } }),
@@ -208,6 +212,7 @@ export const getImportStatus = createServerFn({ method: 'GET' }).handler(
         db.passengerType.count({ where: { deletedAt: null } }),
         db.order.count(),
         db.orderItem.count(), // `OrderItem` has no `deletedAt`
+        db.orderCoupon.count(),
       ])
       const unitOptions = unitRows.map((u) => ({
         id: u.id,
@@ -236,6 +241,7 @@ export const getImportStatus = createServerFn({ method: 'GET' }).handler(
           passengerTypes,
           orders,
           tickets,
+          orderCoupons,
         },
       }
     } catch (error) {

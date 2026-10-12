@@ -35,6 +35,9 @@ export const REASON_LABELS: Record<string, string> = {
   REFERENCED_OPERATION_EXCLUDED: 'La operación que referencia quedó fuera de la importación',
   ALREADY_IMPORTED: 'El boleto ya estaba importado',
   OPEN_LEG_WITHOUT_OUTBOUND: 'Abierto sin tramo de ida en su transacción',
+  // Del paso de Cupones.
+  FOLIO_NOT_FOUND: 'No se encontró el boleto del folio',
+  ORDER_ALREADY_HAS_COUPON: 'La orden ya tenía un cupón',
   // Del restore de JSON (`~/server/restore`), no del API.
   ALREADY_EXISTS_WITH_OTHER_ID: 'Ya existe una fila con esa clave, bajo otro id',
   COMPANY_NOT_FOUND: 'No se encontró la empresa',
@@ -70,6 +73,9 @@ export const COUNTER_LABELS: Record<string, string> = {
   priceBreakdownMissing: 'Boletos sin subtotal/IVA (IVA calculado)',
   boardingsAppliedToExisting: 'Abordajes aplicados a boletos ya importados',
   boardedTicketNotFound: 'Abordajes de folios que no existen',
+  // Del paso de Cupones.
+  campaignsCreated: 'Campañas creadas',
+  couponCodesCreated: 'Claves de cupón creadas',
   // Del restore de JSON (`~/server/restore`), no del API.
   companiesUpdated: 'Empresas actualizadas',
   servicesUpdated: 'Servicios actualizados',

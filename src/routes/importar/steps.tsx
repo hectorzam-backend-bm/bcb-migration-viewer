@@ -18,6 +18,7 @@ export type SlotKey =
   | 'limits'
   | 'boletos'
   | 'abordados'
+  | 'cupones'
 
 export type Slot = { key: SlotKey; label: string; legacyFile: string }
 
@@ -150,5 +151,17 @@ export const STEPS: ReadonlyArray<StepDef> = [
       s.tickets > 0
         ? { done: true, note: `${plural(s.tickets, 'boleto', 'boletos')} · ${plural(s.orders, 'orden', 'órdenes')}` }
         : { done: false, note: 'Sin boletos todavía.' },
+  },
+  {
+    kind: 'upload',
+    title: 'Cupones',
+    description:
+      'Sube BOLETOS_CUPONES.csv de la misma entrega, después de sus boletos. Liga cada folio a su clave de cupón bajo la campaña «Cupones legado ER». El archivo no trae descuento ni precio original, así que el cupón queda en 0 % y no cambia ningún precio. Una orden conserva un solo cupón: si ya tiene uno, el folio se descarta. Bloqueado hasta que existan boletos.',
+    importStep: 'cupones',
+    slots: [{ key: 'cupones', label: 'Cupones', legacyFile: 'BOLETOS_CUPONES.csv' }],
+    status: (s) =>
+      s.orderCoupons > 0
+        ? { done: true, note: plural(s.orderCoupons, 'orden con cupón', 'órdenes con cupón') }
+        : { done: false, note: 'Sin cupones todavía.' },
   },
 ]

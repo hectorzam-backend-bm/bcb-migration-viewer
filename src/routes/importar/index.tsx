@@ -551,9 +551,14 @@ function Screen() {
   // Mirrors what the backend actually rejects with NO_TRIPS_IMPORTED /
   // NO_PASSENGER_TYPES_IMPORTED.
   const isBoletosBlocked = status.trips === 0 || status.passengerTypes === 0
+  // The backend doesn't reject this one — it would just skip every row as
+  // FOLIO_NOT_FOUND — so the gate only saves a pointless run.
+  const isCuponesBlocked = status.tickets === 0
   const blockedFlags = STEPS.map(
     (s) =>
-      (s.importStep === 'trips' && isTripsBlocked) || (s.importStep === 'boletos' && isBoletosBlocked),
+      (s.importStep === 'trips' && isTripsBlocked) ||
+      (s.importStep === 'boletos' && isBoletosBlocked) ||
+      (s.importStep === 'cupones' && isCuponesBlocked),
   )
   const blockedTitles = STEPS.filter((_, i) => blockedFlags[i]).map((s) => s.title)
   const doneCount = doneFlags.filter(Boolean).length
@@ -678,9 +683,11 @@ function Screen() {
                         ? status.routes === 0
                           ? 'Todavía no hay rutas importadas — sube primero el paso de Rutas.'
                           : `${integer(status.routesWithoutUnit)} de ${integer(status.routes)} rutas sin unidad — revisa el paso de Unidades.`
-                        : status.trips === 0
-                          ? 'Todavía no hay corridas importadas — sube primero el paso de Corridas.'
-                          : 'No hay tipos de pasajero en la base. Los crea el paso de Corridas al leer LIMITE_PASAJERO.csv.'
+                        : currentDef.importStep === 'cupones'
+                          ? 'Todavía no hay boletos importados — sube primero el paso de Boletos.'
+                          : status.trips === 0
+                            ? 'Todavía no hay corridas importadas — sube primero el paso de Corridas.'
+                            : 'No hay tipos de pasajero en la base. Los crea el paso de Corridas al leer LIMITE_PASAJERO.csv.'
                       : null
                   }
                 />
