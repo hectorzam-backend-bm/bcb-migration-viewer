@@ -332,3 +332,22 @@ export const DAY_OF_WEEK_LABELS: Record<string, string> = {
   SATURDAY: 'Sábado',
   SUNDAY: 'Domingo',
 }
+
+/** `TravelCardStatus` — `TravelCard.status`. */
+export const TRAVEL_CARD_STATUS_LABELS: Record<string, string> = {
+  OPEN: 'Abierta',
+  CONFIRMED: 'Confirmada',
+  COLLECTED: 'Recaudada',
+  CANCELLED: 'Cancelada',
+}
+
+/** `CollectionConcept` — one `TravelCardAmountLine` per concept. */
+export const COLLECTION_CONCEPT_LABELS: Record<string, string> = {
+  SYSTEM_SALES: 'Venta de sistema',
+  ONBOARD_SALES: 'Venta a bordo',
+  MANUAL_SALES: 'Venta manual',
+  PREPAID_TICKETS: 'Boletos con prepago',
+  PREPAID_RECHARGES: 'Recargas de prepago',
+  PREPAID_SALES: 'Venta de tarjetas de prepago',
+  PENALTY: 'Penalización',
+}

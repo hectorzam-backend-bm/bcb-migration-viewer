@@ -34,6 +34,7 @@ const IMPORT_STEPS = {
   segments: { path: '/seeds/import/segments', fields: ['segments', 'routes'] },
   tariffs: { path: '/seeds/import/tariffs', fields: ['tariffs'] },
   trips: { path: '/seeds/import/trips', fields: ['corridas', 'limits'] },
+  travelCards: { path: '/seeds/import/travel-cards', fields: ['corridas'] },
   boletos: { path: '/seeds/import/boletos', fields: ['boletos', 'abordados'] },
   cupones: { path: '/seeds/import/cupones', fields: ['cupones'] },
 } as const satisfies Record<string, { path: string; fields: ReadonlyArray<string> }>
@@ -150,6 +151,7 @@ export type ImportStatus = {
   tripSeats: number
   operators: number
   buses: number
+  travelCards: number
   /** Second half of the boletos gate — the Corridas step creates these
    *  from LIMITE_PASAJERO.csv. */
   passengerTypes: number
@@ -184,6 +186,7 @@ export const getImportStatus = createServerFn({ method: 'GET' }).handler(
         tripSeats,
         operators,
         buses,
+        travelCards,
         passengerTypes,
         orders,
         tickets,
@@ -209,6 +212,7 @@ export const getImportStatus = createServerFn({ method: 'GET' }).handler(
         db.tripSeat.count(),
         db.operator.count(),
         db.bus.count({ where: { deletedAt: null } }),
+        db.travelCard.count(),
         db.passengerType.count({ where: { deletedAt: null } }),
         db.order.count(),
         db.orderItem.count(), // `OrderItem` has no `deletedAt`
@@ -238,6 +242,7 @@ export const getImportStatus = createServerFn({ method: 'GET' }).handler(
           tripSeats,
           operators,
           buses,
+          travelCards,
           passengerTypes,
           orders,
           tickets,

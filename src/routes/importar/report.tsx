@@ -27,6 +27,9 @@ export const REASON_LABELS: Record<string, string> = {
   INVALID_DEPARTURE: 'Fecha y hora de salida inválida',
   PASSENGER_TYPE_NOT_FOUND: 'No se encontró el tipo de pasajero',
   TRIP_NOT_FOUND_FOR_LIMIT: 'El límite no corresponde a ninguna corrida',
+  // Del paso de Tarjetas de viaje.
+  CARD_ALREADY_EXISTS: 'La corrida ya tenía tarjeta de viaje',
+  INVALID_FECHA_RECAUDACION: 'Fecha de recaudación inválida',
   // Del paso de Boletos.
   TRIP_NOT_FOUND: 'No se encontró la corrida',
   MISSING_TRIP_LINK: 'El boleto no apunta a ninguna corrida',
@@ -57,6 +60,13 @@ export const COUNTER_LABELS: Record<string, string> = {
   operatorsUnresolved: 'Operadores sin resolver',
   busesUnresolved: 'Autobuses sin resolver',
   negativeTicketsSoldClamped: 'Boletos vendidos negativos ajustados a 0',
+  busesCreated: 'Autobuses de relleno creados',
+  // Del paso de Tarjetas de viaje.
+  dispatchesCreated: 'Despachos creados',
+  dispatchSkippedNoOperatorOrBus: 'Tarjetas sin despacho (corrida sin operador o autobús)',
+  zeroAmount: 'Tarjetas con monto recaudado en 0',
+  collectedBeforeDeparture: 'Tarjetas recaudadas antes de la salida',
+  openTripCollected: 'Corridas abiertas con tarjeta recaudada',
   // Del paso de Boletos.
   orderItemsCreated: 'Boletos creados',
   passengersCreated: 'Pasajeros creados',
@@ -95,6 +105,10 @@ const AMBER_COUNTERS = new Set([
   'routesWithoutTariff',
   'segmentsWithoutTariff',
   'negativeTicketsSoldClamped',
+  'dispatchSkippedNoOperatorOrBus',
+  'zeroAmount',
+  'collectedBeforeDeparture',
+  'openTripCollected',
   'seatNumberMissing',
   'passengerTypeUnresolved',
   'paymentMethodCodeUnrecognized',

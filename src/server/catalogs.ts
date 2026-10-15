@@ -10,6 +10,7 @@ export type CatalogCounts = {
   trips: number
   tickets: number
   coupons: number
+  travelCards: number
 }
 
 /** Live rail counts. Excludes soft deletes: the rail counts what is current —
@@ -18,7 +19,7 @@ export type CatalogCounts = {
 export const getCatalogCounts = createServerFn({ method: 'GET' }).handler(
   async (): Promise<{ counts: CatalogCounts | null; failure: ReturnType<typeof describeFailure> | null }> => {
     try {
-      const [companies, services, stations, routes, segments, trips, tickets, coupons] = await Promise.all([
+      const [companies, services, stations, routes, segments, trips, tickets, coupons, travelCards] = await Promise.all([
         db.company.count({ where: { deletedAt: null } }),
         db.service.count({ where: { deletedAt: null } }),
         db.station.count({ where: { deletedAt: null } }),
@@ -27,9 +28,10 @@ export const getCatalogCounts = createServerFn({ method: 'GET' }).handler(
         db.trip.count({ where: { deletedAt: null } }),
         db.orderItem.count(),
         db.couponCampaign.count({ where: { deletedAt: null } }),
+        db.travelCard.count(), // `TravelCard` has no `deletedAt`
       ])
       return {
-        counts: { companies, services, stations, routes, segments, trips, tickets, coupons },
+        counts: { companies, services, stations, routes, segments, trips, tickets, coupons, travelCards },
         failure: null,
       }
     } catch (error) {

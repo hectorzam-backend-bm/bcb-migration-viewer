@@ -139,6 +139,18 @@ export const STEPS: ReadonlyArray<StepDef> = [
   },
   {
     kind: 'upload',
+    title: 'Tarjetas de viaje',
+    description:
+      'Sube el mismo CORRIDAS_TARJETAS.csv del paso de Corridas. Crea una tarjeta por corrida, ya recaudada en su FECHA_RECAUDACION: el folio impreso, la venta de sistema, a bordo y manual, el monto recaudado, el sueldo del operador y el despacho (operador y autobús) de la corrida. Una corrida que ya tiene tarjeta se descarta. Bloqueado hasta que existan corridas.',
+    importStep: 'travelCards',
+    slots: [{ key: 'corridas', label: 'Corridas', legacyFile: 'CORRIDAS_TARJETAS.csv' }],
+    status: (s) =>
+      s.travelCards > 0
+        ? { done: true, note: plural(s.travelCards, 'tarjeta', 'tarjetas') }
+        : { done: false, note: 'Sin tarjetas todavía.' },
+  },
+  {
+    kind: 'upload',
     title: 'Boletos',
     description:
       'Sube boletos.csv y BOLETOS_ABORDADOS.csv. Crea las órdenes, los boletos, sus pasajeros, los asientos de cada corrida y un movimiento por boleto. BOLETOS_ABORDADOS.csv decide el estatus: un folio listado ahí queda «Viajó» con su hora de abordaje; uno con corrida ya pasada que no aparece, «No viajó». También marca como abordados los boletos de entregas anteriores, así que las entregas se suben en orden. Bloqueado hasta que existan corridas y tipos de pasajero — el paso de Corridas crea ambos. El importador no lee el correo, el teléfono, el asesor, la caja real, el corte ni el descuento: esos campos quedan vacíos en el visor.',

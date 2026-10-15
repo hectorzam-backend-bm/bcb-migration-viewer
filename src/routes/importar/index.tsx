@@ -548,6 +548,9 @@ function Screen() {
   // Mirrors `TripsGate`'s own `blocked`: no routes at all is blocked too, not
   // just "some routes lack a unit" — see the comment there.
   const isTripsBlocked = status.routes === 0 || status.routesWithoutUnit > 0
+  // The backend doesn't reject this one either — it would skip every row as
+  // TRIP_NOT_FOUND.
+  const isTravelCardsBlocked = status.trips === 0
   // Mirrors what the backend actually rejects with NO_TRIPS_IMPORTED /
   // NO_PASSENGER_TYPES_IMPORTED.
   const isBoletosBlocked = status.trips === 0 || status.passengerTypes === 0
@@ -557,6 +560,7 @@ function Screen() {
   const blockedFlags = STEPS.map(
     (s) =>
       (s.importStep === 'trips' && isTripsBlocked) ||
+      (s.importStep === 'travelCards' && isTravelCardsBlocked) ||
       (s.importStep === 'boletos' && isBoletosBlocked) ||
       (s.importStep === 'cupones' && isCuponesBlocked),
   )
