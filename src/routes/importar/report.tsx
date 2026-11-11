@@ -12,7 +12,7 @@ import type { ImportReport } from '~/server/seeds'
  */
 export const REASON_LABELS: Record<string, string> = {
   STATION_ALREADY_EXISTS: 'La terminal ya existía',
-  STATION_NOT_IN_CSV: 'La terminal no está en estados.csv',
+  STATION_NOT_IN_CSV: 'La terminal no está en Terminales.csv',
   STATION_NOT_FOUND: 'No se encontró la terminal',
   ROUTE_ALREADY_EXISTS: 'La ruta ya existía',
   ROUTE_NOT_FOUND: 'No se encontró la ruta',
@@ -52,6 +52,7 @@ export const COUNTER_LABELS: Record<string, string> = {
   segmentsUpdated: 'Tramos actualizados',
   routesWithoutTariff: 'Rutas sin tarifa',
   segmentsWithoutTariff: 'Tramos sin tarifa',
+  segmentsWithoutDuration: 'Tramos sin duración (TIEMPO_TRAMOS en 0)',
   routePassengerTypesUpserted: 'Tipos de pasajero por ruta',
   segmentPassengerTypesUpserted: 'Tipos de pasajero por tramo',
   passengerTypesCreated: 'Tipos de pasajero creados',
@@ -86,6 +87,10 @@ export const COUNTER_LABELS: Record<string, string> = {
   // Del paso de Cupones.
   campaignsCreated: 'Campañas creadas',
   couponCodesCreated: 'Claves de cupón creadas',
+  // Del paso de Boletos facturados.
+  rows: 'Filas del archivo',
+  distinctFolios: 'Folios distintos',
+  alreadyInvoiced: 'Boletos que ya estaban facturados',
   // Del restore de JSON (`~/server/restore`), no del API.
   companiesUpdated: 'Empresas actualizadas',
   servicesUpdated: 'Servicios actualizados',
@@ -104,6 +109,7 @@ const AMBER_COUNTERS = new Set([
   'busesUnresolved',
   'routesWithoutTariff',
   'segmentsWithoutTariff',
+  'segmentsWithoutDuration',
   'negativeTicketsSoldClamped',
   'dispatchSkippedNoOperatorOrBus',
   'zeroAmount',

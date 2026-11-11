@@ -12,13 +12,13 @@ export type SlotKey =
   | 'stations'
   | 'routes'
   | 'segments'
-  | 'services'
   | 'tariffs'
   | 'corridas'
   | 'limits'
   | 'boletos'
   | 'abordados'
   | 'cupones'
+  | 'facturados'
 
 export type Slot = { key: SlotKey; label: string; legacyFile: string }
 
@@ -64,12 +64,12 @@ export const STEPS: ReadonlyArray<StepDef> = [
     kind: 'upload',
     title: 'Terminales',
     description:
-      'Sube estados.csv, rutas.csv y tramos.csv. Sólo se crean las terminales que rutas o tramos usan como origen o destino.',
+      'Sube Terminales, RUTAS y TramosTarifas. Sólo se crean las terminales que rutas o tramos usan como origen o destino.',
     importStep: 'stations',
     slots: [
-      { key: 'stations', label: 'Estados', legacyFile: 'estados.csv' },
-      { key: 'routes', label: 'Rutas', legacyFile: 'rutas.csv' },
-      { key: 'segments', label: 'Tramos', legacyFile: 'tramos.csv' },
+      { key: 'stations', label: 'Terminales', legacyFile: 'Terminales_*.csv' },
+      { key: 'routes', label: 'Rutas', legacyFile: 'RUTAS_*.csv' },
+      { key: 'segments', label: 'Tramos y tarifas', legacyFile: 'TramosTarifas_*.csv' },
     ],
     status: (s) =>
       s.stations > 0
@@ -79,24 +79,20 @@ export const STEPS: ReadonlyArray<StepDef> = [
   {
     kind: 'upload',
     title: 'Rutas',
-    description: 'Sube rutas.csv y servicios.csv. Requiere que ya existan terminales.',
+    description:
+      'Sube RUTAS.csv. Cada ruta se liga a su servicio por SERVICIO_NOMBRE contra los servicios que ya están en la base (paso «Empresas y servicios»). Requiere que ya existan terminales.',
     importStep: 'routes',
-    slots: [
-      { key: 'routes', label: 'Rutas', legacyFile: 'rutas.csv' },
-      { key: 'services', label: 'Servicios', legacyFile: 'servicios.csv' },
-    ],
+    slots: [{ key: 'routes', label: 'Rutas', legacyFile: 'RUTAS_*.csv' }],
     status: (s) =>
       s.routes > 0 ? { done: true, note: plural(s.routes, 'ruta', 'rutas') } : { done: false, note: 'Sin rutas todavía.' },
   },
   {
     kind: 'upload',
     title: 'Tramos',
-    description: 'Sube tramos.csv y rutas.csv. Requiere que ya existan rutas.',
+    description:
+      'Sube TramosTarifas.csv: cada ruta + origen + destino distinto es un tramo; sus repeticiones por tipo de tarifa cuentan una vez. Requiere que ya existan rutas.',
     importStep: 'segments',
-    slots: [
-      { key: 'segments', label: 'Tramos', legacyFile: 'tramos.csv' },
-      { key: 'routes', label: 'Rutas', legacyFile: 'rutas.csv' },
-    ],
+    slots: [{ key: 'segments', label: 'Tramos y tarifas', legacyFile: 'TramosTarifas_*.csv' }],
     status: (s) =>
       s.segments > 0
         ? { done: true, note: plural(s.segments, 'tramo', 'tramos') }
@@ -105,9 +101,10 @@ export const STEPS: ReadonlyArray<StepDef> = [
   {
     kind: 'upload',
     title: 'Tarifas',
-    description: 'Sube tramosTarifa.csv. Sólo actualiza rutas y tramos existentes — nunca crea filas nuevas.',
+    description:
+      'Sube el mismo TramosTarifas.csv del paso de Tramos. Aplica el importe sencillo/redondo y TIEMPO_TRAMOS como duración del tramo. Sólo actualiza rutas y tramos existentes — nunca crea filas nuevas.',
     importStep: 'tariffs',
-    slots: [{ key: 'tariffs', label: 'Tarifas por tramo', legacyFile: 'tramosTarifa.csv' }],
+    slots: [{ key: 'tariffs', label: 'Tarifas por tramo', legacyFile: 'TramosTarifas_*.csv' }],
     status: (s) =>
       s.routesWithTariff > 0
         ? { done: true, note: `${plural(s.routesWithTariff, 'ruta', 'rutas')} con tarifa` }
@@ -175,5 +172,17 @@ export const STEPS: ReadonlyArray<StepDef> = [
       s.orderCoupons > 0
         ? { done: true, note: plural(s.orderCoupons, 'orden con cupón', 'órdenes con cupón') }
         : { done: false, note: 'Sin cupones todavía.' },
+  },
+  {
+    kind: 'upload',
+    title: 'Boletos facturados',
+    description:
+      'Sube BOLETOS_FACTURADOS.csv después de los boletos de la última entrega. Marca como facturado cada boleto listado; un boleto facturado ya no se puede cancelar ni cambiar, y un abierto facturado solo se canjea en el mismo trayecto. No crea nada ni cambia precios, estatus ni horas de abordaje. Un folio que todavía no está importado se reporta y entra al volver a correr el paso. Bloqueado hasta que existan boletos.',
+    importStep: 'facturados',
+    slots: [{ key: 'facturados', label: 'Facturados', legacyFile: 'BOLETOS_FACTURADOS.csv' }],
+    status: (s) =>
+      s.invoicedTickets > 0
+        ? { done: true, note: plural(s.invoicedTickets, 'boleto facturado', 'boletos facturados') }
+        : { done: false, note: 'Sin boletos facturados todavía.' },
   },
 ]

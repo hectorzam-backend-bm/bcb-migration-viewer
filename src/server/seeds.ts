@@ -30,13 +30,14 @@ const TIMEOUT_MS = 15 * 60_000
 
 const IMPORT_STEPS = {
   stations: { path: '/seeds/import/stations', fields: ['stations', 'routes', 'segments'] },
-  routes: { path: '/seeds/import/routes', fields: ['routes', 'services'] },
-  segments: { path: '/seeds/import/segments', fields: ['segments', 'routes'] },
+  routes: { path: '/seeds/import/routes', fields: ['routes'] },
+  segments: { path: '/seeds/import/segments', fields: ['segments'] },
   tariffs: { path: '/seeds/import/tariffs', fields: ['tariffs'] },
   trips: { path: '/seeds/import/trips', fields: ['corridas', 'limits'] },
   travelCards: { path: '/seeds/import/travel-cards', fields: ['corridas'] },
   boletos: { path: '/seeds/import/boletos', fields: ['boletos', 'abordados'] },
   cupones: { path: '/seeds/import/cupones', fields: ['cupones'] },
+  facturados: { path: '/seeds/import/facturados', fields: ['facturados'] },
 } as const satisfies Record<string, { path: string; fields: ReadonlyArray<string> }>
 
 export type ImportStep = keyof typeof IMPORT_STEPS
@@ -162,6 +163,8 @@ export type ImportStatus = {
   tickets: number
   /** One per order — `OrderCoupon.orderId` is unique. */
   orderCoupons: number
+  /** Tickets with `isInvoiced = true` — set only by the Boletos facturados step. */
+  invoicedTickets: number
 }
 
 export type StatusResponse = { ok: true; status: ImportStatus } | { ok: false; failure: Failure }
@@ -191,6 +194,7 @@ export const getImportStatus = createServerFn({ method: 'GET' }).handler(
         orders,
         tickets,
         orderCoupons,
+        invoicedTickets,
       ] = await Promise.all([
         db.state.count(),
         db.company.count({ where: { deletedAt: null } }),
@@ -217,6 +221,7 @@ export const getImportStatus = createServerFn({ method: 'GET' }).handler(
         db.order.count(),
         db.orderItem.count(), // `OrderItem` has no `deletedAt`
         db.orderCoupon.count(),
+        db.orderItem.count({ where: { isInvoiced: true } }),
       ])
       const unitOptions = unitRows.map((u) => ({
         id: u.id,
@@ -247,6 +252,7 @@ export const getImportStatus = createServerFn({ method: 'GET' }).handler(
           orders,
           tickets,
           orderCoupons,
+          invoicedTickets,
         },
       }
     } catch (error) {
